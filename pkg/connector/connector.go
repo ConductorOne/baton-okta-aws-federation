@@ -28,7 +28,6 @@ type Okta struct {
 	clientV5            *oktav5.APIClient
 	domain              string
 	apiToken            string
-	syncInactiveApps    bool
 	syncCustomRoles     bool
 	skipSecondaryEmails bool
 	awsConfig           *awsConfig
@@ -78,7 +77,6 @@ type oktaAWSAppSettings struct {
 type Config struct {
 	Domain                                                string
 	ApiToken                                              string
-	SyncInactiveApps                                      bool
 	OktaProvisioning                                      bool
 	Cache                                                 bool
 	CacheTTI                                              int32
@@ -341,7 +339,6 @@ func New(ctx context.Context, cfg *Config) (*Okta, error) {
 		clientV5:            oktaClientV5,
 		domain:              cfg.Domain,
 		apiToken:            cfg.ApiToken,
-		syncInactiveApps:    cfg.SyncInactiveApps,
 		syncCustomRoles:     cfg.SyncCustomRoles,
 		skipSecondaryEmails: cfg.SkipSecondaryEmails,
 		SyncSecrets:         cfg.SyncSecrets,

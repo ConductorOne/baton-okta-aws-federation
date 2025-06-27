@@ -203,9 +203,8 @@ func getClietForTesting(ctx context.Context, cfg *Config) (*Okta, error) {
 	}
 
 	return &Okta{
-		client:           oktaClient,
-		domain:           cfg.Domain,
-		apiToken:         cfg.ApiToken,
-		syncInactiveApps: cfg.SyncInactiveApps,
+		client:   oktaClient,
+		domain:   cfg.Domain,
+		apiToken: cfg.ApiToken,
 	}, nil
 }
