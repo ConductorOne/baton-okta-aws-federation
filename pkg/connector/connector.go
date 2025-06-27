@@ -30,7 +30,6 @@ type Okta struct {
 	apiToken            string
 	skipSecondaryEmails bool
 	awsConfig           *awsConfig
-	userRoleCache       sync.Map
 }
 
 type awsConfig struct {
