@@ -174,40 +174,6 @@ func embeddedOktaUserFromAppUser(appUser *okta.AppUser) (*okta.User, error) {
 	return oktaUser, nil
 }
 
-func shouldIncludeOktaUser(u *okta.User, emailDomainFilters []string) bool {
-	if len(emailDomainFilters) == 0 {
-		return false
-	}
-
-	var userEmails []string
-	oktaProfile := *u.Profile
-	if email, ok := oktaProfile["email"].(string); ok {
-		userEmails = append(userEmails, email)
-	}
-	if secondEmail, ok := oktaProfile["secondEmail"].(string); ok {
-		userEmails = append(userEmails, secondEmail)
-	}
-
-	if login, ok := oktaProfile["login"].(string); ok {
-		if strings.Contains(login, "@") {
-			userEmails = append(userEmails, login)
-		}
-	}
-
-	return shouldIncludeUserByEmails(userEmails, emailDomainFilters)
-}
-
-func shouldIncludeUserByEmails(userEmails []string, emailDomainFilters []string) bool {
-	for _, filter := range emailDomainFilters {
-		for _, ue := range userEmails {
-			if strings.HasSuffix(strings.ToLower(ue), "@"+filter) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 func (o *userResourceType) Entitlements(
 	_ context.Context,
 	resource *v2.Resource,
