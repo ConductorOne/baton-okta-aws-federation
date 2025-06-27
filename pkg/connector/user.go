@@ -51,15 +51,13 @@ func (o *userResourceType) List(
 	resourceID *v2.ResourceId,
 	token *pagination.Token,
 ) ([]*v2.Resource, string, annotations.Annotations, error) {
-	if o.connector.awsConfig != nil && o.connector.awsConfig.Enabled {
-		awsConfig, err := o.connector.getAWSApplicationConfig(ctx)
-		if err != nil {
-			return nil, "", nil, fmt.Errorf("error getting aws app settings config")
-		}
-		// TODO(lauren) get users for all groups matching pattern when user group mapping enabled
-		if !awsConfig.UseGroupMapping {
-			return o.listAWSAccountUsers(ctx, resourceID, token)
-		}
+	awsConfig, err := o.connector.getAWSApplicationConfig(ctx)
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("error getting aws app settings config")
+	}
+	// TODO(lauren) get users for all groups matching pattern when user group mapping enabled
+	if !awsConfig.UseGroupMapping {
+		return o.listAWSAccountUsers(ctx, resourceID, token)
 	}
 
 	bag, page, err := parsePageToken(token.Token, &v2.ResourceId{ResourceType: resourceTypeUser.Id})
@@ -492,15 +490,13 @@ func (o *userResourceType) Get(ctx context.Context, resourceId *v2.ResourceId, p
 
 	var annos annotations.Annotations
 
-	if o.connector.awsConfig != nil && o.connector.awsConfig.Enabled {
-		awsConfig, err := o.connector.getAWSApplicationConfig(ctx)
-		if err != nil {
-			return nil, nil, fmt.Errorf("error getting aws app settings config")
-		}
-		// TODO: check if user is in any groups matching pattern when user group mapping enabled
-		if !awsConfig.UseGroupMapping {
-			return o.findAWSAccountUser(ctx, resourceId.Resource)
-		}
+	awsConfig, err := o.connector.getAWSApplicationConfig(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error getting aws app settings config")
+	}
+	// TODO: check if user is in any groups matching pattern when user group mapping enabled
+	if !awsConfig.UseGroupMapping {
+		return o.findAWSAccountUser(ctx, resourceId.Resource)
 	}
 
 	user, respCtx, err := getUser(ctx, o.connector.client, resourceId.Resource)

@@ -47,20 +47,12 @@ func (o *groupResourceType) List(
 	var rv []*v2.Resource
 	var groups []*okta.Group
 	var respCtx *responseContext
-	if o.connector.awsConfig != nil && o.connector.awsConfig.Enabled {
-		if o.connector.awsConfig.AWSSourceIdentityMode {
-			return rv, "", nil, nil
-		}
-		groups, respCtx, err = o.listAWSGroups(ctx, token, page)
-		if err != nil {
-			return nil, "", nil, fmt.Errorf("okta-connectorv2: failed to list app groups: %w", err)
-		}
-	} else {
-		qp := queryParamsExpand(token.Size, page, "stats")
-		groups, respCtx, err = o.listGroups(ctx, token, qp)
-		if err != nil {
-			return nil, "", nil, fmt.Errorf("okta-connectorv2: failed to list groups: %w", err)
-		}
+	if o.connector.awsConfig.AWSSourceIdentityMode {
+		return rv, "", nil, nil
+	}
+	groups, respCtx, err = o.listAWSGroups(ctx, token, page)
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("okta-connectorv2: failed to list app groups: %w", err)
 	}
 
 	nextPage, annos, err := parseResp(respCtx.OktaResponse)
@@ -96,7 +88,7 @@ func (o *groupResourceType) Entitlements(
 	token *pagination.Token,
 ) ([]*v2.Entitlement, string, annotations.Annotations, error) {
 	var rv []*v2.Entitlement
-	if o.connector.awsConfig != nil && o.connector.awsConfig.Enabled && o.connector.awsConfig.AWSSourceIdentityMode {
+	if o.connector.awsConfig.AWSSourceIdentityMode {
 		return rv, "", nil, nil
 	}
 
@@ -135,16 +127,11 @@ func (o *groupResourceType) Grants(
 		return nil, "", nil, err
 	}
 
-	if o.connector.awsConfig != nil && o.connector.awsConfig.Enabled && o.connector.awsConfig.AWSSourceIdentityMode {
+	if o.connector.awsConfig.AWSSourceIdentityMode {
 		return rv, "", nil, nil
 	}
 
 	if bag.Current() == nil {
-		if o.connector.awsConfig == nil || !o.connector.awsConfig.Enabled {
-			bag.Push(pagination.PageState{
-				ResourceTypeID: resourceTypeRole.Id,
-			})
-		}
 		bag.Push(pagination.PageState{
 			ResourceTypeID: resourceTypeUser.Id,
 		})
@@ -599,14 +586,10 @@ func (o *groupResourceType) Get(ctx context.Context, resourceId *v2.ResourceId, 
 	var group *okta.Group
 	var resp *okta.Response
 	var err error
-	if o.connector.awsConfig != nil && o.connector.awsConfig.Enabled {
-		if o.connector.awsConfig.AWSSourceIdentityMode {
-			return nil, annos, nil
-		}
-		group, resp, err = o.getAWSGroup(ctx, resourceId.Resource)
-	} else {
-		group, resp, err = o.connector.client.Group.GetGroup(ctx, resourceId.Resource)
+	if o.connector.awsConfig.AWSSourceIdentityMode {
+		return nil, annos, nil
 	}
+	group, resp, err = o.getAWSGroup(ctx, resourceId.Resource)
 
 	if err != nil {
 		return nil, nil, handleOktaResponseError(resp, err)

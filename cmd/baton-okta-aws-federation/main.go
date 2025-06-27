@@ -45,7 +45,6 @@ func getConnector(ctx context.Context, v *viper.Viper) (types.ConnectorServer, e
 		CacheTTL:              v.GetInt32("cache-ttl"),
 		SyncCustomRoles:       v.GetBool("sync-custom-roles"),
 		SkipSecondaryEmails:   v.GetBool("skip-secondary-emails"),
-		AWSMode:               v.GetBool("aws-identity-center-mode"),
 		AWSOktaAppId:          v.GetString("aws-okta-app-id"),
 		AWSSourceIdentityMode: v.GetBool("aws-source-identity-mode"),
 		AllowGroupToDirectAssignmentConversionForProvisioning: v.GetBool("aws-allow-group-to-direct-assignment-conversion-for-provisioning"),

@@ -37,7 +37,6 @@ type Okta struct {
 }
 
 type awsConfig struct {
-	Enabled                                               bool
 	OktaAppId                                             string
 	awsAppConfigCacheMutex                                sync.Mutex
 	oktaAWSAppSettings                                    *oktaAWSAppSettings
@@ -86,7 +85,6 @@ type Config struct {
 	CacheTTL                                              int32
 	SyncCustomRoles                                       bool
 	SkipSecondaryEmails                                   bool
-	AWSMode                                               bool
 	AWSOktaAppId                                          string
 	AWSSourceIdentityMode                                 bool
 	AllowGroupToDirectAssignmentConversionForProvisioning bool
@@ -161,33 +159,10 @@ var (
 )
 
 func (o *Okta) ResourceSyncers(ctx context.Context) []connectorbuilder.ResourceSyncer {
-	if o.awsConfig.Enabled {
-		resourceSyncer := []connectorbuilder.ResourceSyncer{accountBuilder(o), groupBuilder(o)}
-		if !o.awsConfig.AWSSourceIdentityMode {
-			resourceSyncer = append(resourceSyncer, userBuilder(o))
-		}
-		return resourceSyncer
+	resourceSyncer := []connectorbuilder.ResourceSyncer{accountBuilder(o), groupBuilder(o)}
+	if !o.awsConfig.AWSSourceIdentityMode {
+		resourceSyncer = append(resourceSyncer, userBuilder(o))
 	}
-
-	resourceSyncer := []connectorbuilder.ResourceSyncer{
-		roleBuilder(o.client, o),
-		userBuilder(o),
-		groupBuilder(o),
-		appBuilder(o.domain, o.apiToken, o.syncInactiveApps, o.client),
-	}
-
-	if o.syncCustomRoles {
-		resourceSyncer = append(resourceSyncer,
-			customRoleBuilder(o),
-			resourceSetsBuilder(o.domain, o.client, o.clientV5),
-			resourceSetsBindingsBuilder(o.domain, o.client, o.clientV5),
-		)
-	}
-
-	if o.SyncSecrets {
-		resourceSyncer = append(resourceSyncer, apiTokenBuilder(o.clientV5))
-	}
-
 	return resourceSyncer
 }
 
@@ -195,11 +170,7 @@ func (c *Okta) ListResourceTypes(ctx context.Context, request *v2.ResourceTypesS
 	resourceTypes := []*v2.ResourceType{
 		resourceTypeUser,
 		resourceTypeGroup,
-	}
-	if c.awsConfig != nil && c.awsConfig.Enabled {
-		resourceTypes = append(resourceTypes, resourceTypeAccount)
-	} else {
-		resourceTypes = append(resourceTypes, resourceTypeRole, resourceTypeApp)
+		resourceTypeAccount,
 	}
 
 	if c.syncCustomRoles {
@@ -309,11 +280,9 @@ func (c *Okta) Validate(ctx context.Context) (annotations.Annotations, error) {
 		return nil, err
 	}
 
-	if c.awsConfig != nil && c.awsConfig.Enabled {
-		_, err = c.getAWSApplicationConfig(ctx)
-		if err != nil {
-			return nil, err
-		}
+	_, err = c.getAWSApplicationConfig(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	return nil, nil
@@ -362,7 +331,6 @@ func New(ctx context.Context, cfg *Config) (*Okta, error) {
 	}
 
 	awsConfig := &awsConfig{
-		Enabled:               cfg.AWSMode,
 		OktaAppId:             cfg.AWSOktaAppId,
 		AWSSourceIdentityMode: cfg.AWSSourceIdentityMode,
 		AllowGroupToDirectAssignmentConversionForProvisioning: cfg.AllowGroupToDirectAssignmentConversionForProvisioning,
