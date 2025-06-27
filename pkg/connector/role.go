@@ -225,40 +225,6 @@ func (o *roleResourceType) listSystemRoles(
 	return rv, nil
 }
 
-func listOktaIamCustomRoles(
-	ctx context.Context,
-	client *okta.Client,
-	token *pagination.Token,
-	qp *query.Params,
-) ([]*okta.Role, *responseContext, error) {
-	url := apiPathListIamCustomRoles
-	if qp != nil {
-		url += qp.String()
-	}
-
-	rq := client.CloneRequestExecutor()
-	req, err := rq.
-		WithAccept(ContentType).
-		WithContentType(ContentType).
-		NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	var role *CustomRoles
-	resp, err := rq.Do(ctx, req, &role)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	respCtx, err := responseToContext(token, resp)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return role.Roles, respCtx, nil
-}
-
 func listAllUsersWithRoleAssignments(
 	ctx context.Context,
 	client *okta.Client,

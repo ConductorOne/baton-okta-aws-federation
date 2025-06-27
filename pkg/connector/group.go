@@ -282,10 +282,6 @@ func (o *groupResourceType) Grants(
 	}
 }
 
-func (o *groupResourceType) listGroups(ctx context.Context, token *pagination.Token, qp *query.Params) ([]*okta.Group, *responseContext, error) {
-	return listGroupsHelper(ctx, o.connector.client, token, qp)
-}
-
 func listGroupsHelper(ctx context.Context, client *okta.Client, token *pagination.Token, qp *query.Params) ([]*okta.Group, *responseContext, error) {
 	groups, resp, err := client.Group.ListGroups(ctx, qp)
 	if err != nil {
