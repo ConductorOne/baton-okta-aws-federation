@@ -133,16 +133,6 @@ var (
 		DisplayName: "Account",
 		Annotations: v1AnnotationsForResourceType("account", false),
 	}
-	resourceTypeResourceSets = &v2.ResourceType{
-		Id:          "resource-set",
-		DisplayName: "Resource Set",
-		Annotations: v1AnnotationsForResourceType("resource-set", false),
-	}
-	resourceTypeResourceSetsBindings = &v2.ResourceType{
-		Id:          "resourceset-binding",
-		DisplayName: "Resource Set Binding",
-		Annotations: v1AnnotationsForResourceType("resourceset-binding", false),
-	}
 )
 
 func (o *Okta) ResourceSyncers(ctx context.Context) []connectorbuilder.ResourceSyncer {
