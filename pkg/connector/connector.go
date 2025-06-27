@@ -14,7 +14,6 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
 	"github.com/conductorone/baton-sdk/pkg/uhttp"
-	oktav5 "github.com/conductorone/okta-sdk-golang/v5/okta"
 	"github.com/okta/okta-sdk-golang/v2/okta"
 )
 
@@ -25,7 +24,6 @@ const ExpectedGroupNameCaptureGroupsWithGroupFilterForMultipleAWSInstances = 3
 
 type Okta struct {
 	client              *okta.Client
-	clientV5            *oktav5.APIClient
 	domain              string
 	apiToken            string
 	skipSecondaryEmails bool
@@ -263,8 +261,6 @@ func New(ctx context.Context, cfg *Config) (*Okta, error) {
 		return nil, err
 	}
 
-	var oktaClientV5 *oktav5.APIClient
-
 	if cfg.ApiToken != "" && cfg.Domain != "" {
 		_, oktaClient, err = okta.NewClient(ctx,
 			okta.WithOrgUrl(fmt.Sprintf("https://%s", cfg.Domain)),
@@ -277,19 +273,6 @@ func New(ctx context.Context, cfg *Config) (*Okta, error) {
 		if err != nil {
 			return nil, err
 		}
-
-		config, err := oktav5.NewConfiguration(
-			oktav5.WithOrgUrl(fmt.Sprintf("https://%s", cfg.Domain)),
-			oktav5.WithToken(cfg.ApiToken),
-			oktav5.WithHttpClientPtr(client),
-			oktav5.WithCache(cfg.Cache),
-			oktav5.WithCacheTti(cfg.CacheTTI),
-			oktav5.WithCacheTtl(cfg.CacheTTL),
-		)
-		if err != nil {
-			return nil, err
-		}
-		oktaClientV5 = oktav5.NewAPIClient(config)
 	}
 
 	awsConfig := &awsConfig{
@@ -300,7 +283,6 @@ func New(ctx context.Context, cfg *Config) (*Okta, error) {
 
 	return &Okta{
 		client:              oktaClient,
-		clientV5:            oktaClientV5,
 		domain:              cfg.Domain,
 		apiToken:            cfg.ApiToken,
 		skipSecondaryEmails: cfg.SkipSecondaryEmails,
