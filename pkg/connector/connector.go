@@ -79,9 +79,6 @@ type oktaAWSAppSettings struct {
 type Config struct {
 	Domain                                                string
 	ApiToken                                              string
-	OktaClientId                                          string
-	OktaPrivateKey                                        string
-	OktaPrivateKeyId                                      string
 	SyncInactiveApps                                      bool
 	OktaProvisioning                                      bool
 	Cache                                                 bool
@@ -161,21 +158,6 @@ var (
 		Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_SECRET},
 		Annotations: v1AnnotationsForResourceType("api-token", true),
 	}
-	defaultScopes = []string{
-		"okta.users.read",
-		"okta.groups.read",
-		"okta.roles.read",
-		"okta.apps.read",
-	}
-	provisioningScopes = []string{
-		"okta.users.manage",
-		"okta.groups.manage",
-		"okta.roles.manage",
-		"okta.apps.manage",
-	}
-
-	// TODO (santhosh) Add required scopes for secrets sync
-	// TODO(lauren) use different scopes for aws mode?
 )
 
 func (o *Okta) ResourceSyncers(ctx context.Context) []connectorbuilder.ResourceSyncer {
@@ -344,7 +326,6 @@ func (c *Okta) Asset(ctx context.Context, asset *v2.AssetRef) (string, io.ReadCl
 func New(ctx context.Context, cfg *Config) (*Okta, error) {
 	var (
 		oktaClient *okta.Client
-		scopes     = defaultScopes
 	)
 	client, err := uhttp.NewClient(ctx, uhttp.WithLogger(true, nil))
 	if err != nil {
@@ -370,47 +351,6 @@ func New(ctx context.Context, cfg *Config) (*Okta, error) {
 			oktav5.WithOrgUrl(fmt.Sprintf("https://%s", cfg.Domain)),
 			oktav5.WithToken(cfg.ApiToken),
 			oktav5.WithHttpClientPtr(client),
-			oktav5.WithCache(cfg.Cache),
-			oktav5.WithCacheTti(cfg.CacheTTI),
-			oktav5.WithCacheTtl(cfg.CacheTTL),
-		)
-		if err != nil {
-			return nil, err
-		}
-		oktaClientV5 = oktav5.NewAPIClient(config)
-	}
-
-	if cfg.OktaClientId != "" && cfg.OktaPrivateKey != "" && cfg.Domain != "" {
-		if cfg.OktaProvisioning {
-			scopes = append(scopes, provisioningScopes...)
-		}
-
-		if cfg.SyncSecrets {
-			defaultScopes = append(defaultScopes, "okta.apiTokens.read")
-		}
-
-		_, oktaClient, err = okta.NewClient(ctx,
-			okta.WithOrgUrl(fmt.Sprintf("https://%s", cfg.Domain)),
-			okta.WithAuthorizationMode("PrivateKey"),
-			okta.WithClientId(cfg.OktaClientId),
-			okta.WithScopes(scopes),
-			okta.WithPrivateKey(cfg.OktaPrivateKey),
-			okta.WithPrivateKeyId(cfg.OktaPrivateKeyId),
-			okta.WithCache(cfg.Cache),
-			okta.WithCacheTti(cfg.CacheTTI),
-			okta.WithCacheTtl(cfg.CacheTTL),
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		config, err := oktav5.NewConfiguration(
-			oktav5.WithOrgUrl(fmt.Sprintf("https://%s", cfg.Domain)),
-			oktav5.WithAuthorizationMode("PrivateKey"),
-			oktav5.WithClientId(cfg.OktaClientId),
-			oktav5.WithScopes(scopes),
-			oktav5.WithPrivateKey(cfg.OktaPrivateKey),
-			oktav5.WithPrivateKeyId(cfg.OktaPrivateKeyId),
 			oktav5.WithCache(cfg.Cache),
 			oktav5.WithCacheTti(cfg.CacheTTI),
 			oktav5.WithCacheTtl(cfg.CacheTTL),

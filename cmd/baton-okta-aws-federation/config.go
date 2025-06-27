@@ -7,9 +7,6 @@ import (
 var (
 	domain                = field.StringField("domain", field.WithRequired(true), field.WithDescription("The URL for the Okta organization"))
 	apiToken              = field.StringField("api-token", field.WithDescription("The API token for the service account"))
-	oktaClientId          = field.StringField("okta-client-id", field.WithDescription("The Okta Client ID"))
-	oktaPrivateKeyId      = field.StringField("okta-private-key-id", field.WithDescription("The Okta Private Key ID"))
-	oktaPrivateKey        = field.StringField("okta-private-key", field.WithDescription("The Okta Private Key. This can be the whole private key or the path to the private key"))
 	syncInactivateApps    = field.BoolField("sync-inactive-apps", field.WithDescription("Whether to sync inactive apps or not"), field.WithDefaultValue(true))
 	oktaProvisioning      = field.BoolField("okta-provisioning")
 	cache                 = field.BoolField("cache", field.WithDescription("Enable response cache"), field.WithDefaultValue(true))
@@ -28,10 +25,7 @@ var (
 )
 
 var relationships = []field.SchemaFieldRelationship{
-	field.FieldsDependentOn([]field.SchemaField{oktaPrivateKeyId, oktaPrivateKey}, []field.SchemaField{oktaClientId}),
 	field.FieldsDependentOn([]field.SchemaField{awsOktaAppId}, []field.SchemaField{awsIdentityCenterMode}),
-	field.FieldsMutuallyExclusive(apiToken, oktaClientId),
-	field.FieldsAtLeastOneUsed(apiToken, oktaClientId),
 	field.FieldsRequiredTogether(awsIdentityCenterMode, awsOktaAppId),
 	field.FieldsDependentOn([]field.SchemaField{awsSourceIdentityMode, awsAllowGroupToDirectAssignmentConversionForProvisioning}, []field.SchemaField{awsIdentityCenterMode}),
 }
@@ -39,9 +33,6 @@ var relationships = []field.SchemaFieldRelationship{
 var configuration = field.NewConfiguration([]field.SchemaField{
 	domain,
 	apiToken,
-	oktaClientId,
-	oktaPrivateKey,
-	oktaPrivateKeyId,
 	syncInactivateApps,
 	oktaProvisioning,
 	cache,

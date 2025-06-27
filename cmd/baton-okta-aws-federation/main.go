@@ -38,9 +38,6 @@ func getConnector(ctx context.Context, v *viper.Viper) (types.ConnectorServer, e
 	ccfg := &connector.Config{
 		Domain:                v.GetString("domain"),
 		ApiToken:              v.GetString("api-token"),
-		OktaClientId:          v.GetString("okta-client-id"),
-		OktaPrivateKey:        v.GetString("okta-private-key"),
-		OktaPrivateKeyId:      v.GetString("okta-private-key-id"),
 		SyncInactiveApps:      v.GetBool("sync-inactive-apps"),
 		OktaProvisioning:      v.GetBool("okta-provisioning"),
 		Cache:                 v.GetBool("cache"),
