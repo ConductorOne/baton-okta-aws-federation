@@ -5,8 +5,9 @@ import (
 )
 
 var (
-	domain                                                   = field.StringField("domain", field.WithRequired(true), field.WithDescription("The URL for the Okta organization"))
-	apiToken                                                 = field.StringField("api-token", field.WithRequired(true), field.WithDescription("The API token for the service account"))
+	domain   = field.StringField("domain", field.WithRequired(true), field.WithDescription("The URL for the Okta organization"))
+	apiToken = field.StringField("api-token", field.WithRequired(true), field.WithDescription("The API token for the service account"))
+
 	awsAllowGroupToDirectAssignmentConversionForProvisioning = field.BoolField("aws-allow-group-to-direct-assignment-conversion-for-provisioning",
 		field.WithDescription("Whether to allow group to direct assignment conversion when provisioning"))
 	awsSourceIdentityMode = field.BoolField("aws-source-identity-mode",
