@@ -458,9 +458,5 @@ func getClietForTesting(ctx context.Context, cfg *Config) (*Okta, error) {
 		domain:           cfg.Domain,
 		apiToken:         cfg.ApiToken,
 		syncInactiveApps: cfg.SyncInactiveApps,
-		ciamConfig: &ciamConfig{
-			Enabled:      cfg.Ciam,
-			EmailDomains: cfg.CiamEmailDomains,
-		},
 	}, nil
 }

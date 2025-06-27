@@ -29,17 +29,11 @@ type Okta struct {
 	domain              string
 	apiToken            string
 	syncInactiveApps    bool
-	ciamConfig          *ciamConfig
 	syncCustomRoles     bool
 	skipSecondaryEmails bool
 	awsConfig           *awsConfig
 	SyncSecrets         bool
 	userRoleCache       sync.Map
-}
-
-type ciamConfig struct {
-	Enabled      bool
-	EmailDomains []string
 }
 
 type awsConfig struct {
@@ -90,8 +84,6 @@ type Config struct {
 	OktaPrivateKeyId                                      string
 	SyncInactiveApps                                      bool
 	OktaProvisioning                                      bool
-	Ciam                                                  bool
-	CiamEmailDomains                                      []string
 	Cache                                                 bool
 	CacheTTI                                              int32
 	CacheTTL                                              int32
@@ -187,13 +179,6 @@ var (
 )
 
 func (o *Okta) ResourceSyncers(ctx context.Context) []connectorbuilder.ResourceSyncer {
-	if o.ciamConfig.Enabled {
-		return []connectorbuilder.ResourceSyncer{
-			ciamUserBuilder(o),
-			ciamBuilder(o.client, o.skipSecondaryEmails),
-		}
-	}
-
 	if o.awsConfig.Enabled {
 		resourceSyncer := []connectorbuilder.ResourceSyncer{accountBuilder(o), groupBuilder(o)}
 		if !o.awsConfig.AWSSourceIdentityMode {
@@ -452,11 +437,7 @@ func New(ctx context.Context, cfg *Config) (*Okta, error) {
 		syncCustomRoles:     cfg.SyncCustomRoles,
 		skipSecondaryEmails: cfg.SkipSecondaryEmails,
 		SyncSecrets:         cfg.SyncSecrets,
-		ciamConfig: &ciamConfig{
-			Enabled:      cfg.Ciam,
-			EmailDomains: cfg.CiamEmailDomains,
-		},
-		awsConfig: awsConfig,
+		awsConfig:           awsConfig,
 	}, nil
 }
 

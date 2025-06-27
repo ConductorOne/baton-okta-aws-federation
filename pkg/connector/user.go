@@ -39,7 +39,6 @@ const (
 
 type userResourceType struct {
 	resourceType *v2.ResourceType
-	emailFilters []string
 	connector    *Okta
 }
 
@@ -63,10 +62,6 @@ func (o *userResourceType) List(
 		}
 	}
 
-	// If we are in ciam mode, and there are no email filters specified, don't sync users.
-	if o.connector.ciamConfig.Enabled && len(o.emailFilters) == 0 {
-		return nil, "", nil, nil
-	}
 	bag, page, err := parsePageToken(token.Token, &v2.ResourceId{ResourceType: resourceTypeUser.Id})
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("okta-connectorv2: failed to parse page token: %w", err)
@@ -91,9 +86,6 @@ func (o *userResourceType) List(
 	}
 
 	for _, user := range users {
-		if o.connector.ciamConfig.Enabled && !shouldIncludeOktaUser(user, o.emailFilters) {
-			continue
-		}
 		resource, err := userResource(ctx, user, o.connector.skipSecondaryEmails)
 		if err != nil {
 			return nil, "", nil, err
@@ -288,18 +280,6 @@ func listUsers(ctx context.Context, client *okta.Client, token *pagination.Token
 		return nil, nil, err
 	}
 	return oktaUsers, respCtx, nil
-}
-
-func ciamUserBuilder(connector *Okta) *userResourceType {
-	var loweredFilters []string
-	for _, ef := range connector.ciamConfig.EmailDomains {
-		loweredFilters = append(loweredFilters, strings.ToLower(ef))
-	}
-	return &userResourceType{
-		resourceType: resourceTypeUser,
-		emailFilters: loweredFilters,
-		connector:    connector,
-	}
 }
 
 func userBuilder(connector *Okta) *userResourceType {
@@ -557,11 +537,6 @@ func (o *userResourceType) Get(ctx context.Context, resourceId *v2.ResourceId, p
 		}
 	}
 
-	// If we are in ciam mode, and there are no email filters specified, don't sync user.
-	if o.connector.ciamConfig.Enabled && len(o.emailFilters) == 0 {
-		return nil, nil, nil
-	}
-
 	user, respCtx, err := getUser(ctx, o.connector.client, resourceId.Resource)
 	if err != nil {
 		return nil, nil, fmt.Errorf("okta-connectorv2: failed to find user: %w", err)
@@ -575,10 +550,6 @@ func (o *userResourceType) Get(ctx context.Context, resourceId *v2.ResourceId, p
 	}
 
 	if user == nil {
-		return nil, annos, nil
-	}
-
-	if o.connector.ciamConfig.Enabled && !shouldIncludeOktaUser(user, o.emailFilters) {
 		return nil, annos, nil
 	}
 
