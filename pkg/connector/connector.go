@@ -76,7 +76,6 @@ type oktaAWSAppSettings struct {
 type Config struct {
 	Domain                                                string
 	ApiToken                                              string
-	OktaProvisioning                                      bool
 	Cache                                                 bool
 	CacheTTI                                              int32
 	CacheTTL                                              int32
