@@ -185,10 +185,6 @@ func (o *roleResourceType) Grants(
 					continue
 				}
 
-				if !o.connector.syncCustomRoles && role.Type == roleTypeCustom {
-					continue
-				}
-
 				if role.Type == roleTypeCustom {
 					userRoles.Add(role.Role)
 				} else {

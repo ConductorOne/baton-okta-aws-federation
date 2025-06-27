@@ -225,10 +225,6 @@ func (o *groupResourceType) Grants(
 				continue
 			}
 
-			if !o.connector.syncCustomRoles && role.Type == roleTypeCustom {
-				continue
-			}
-
 			// TODO(lauren) convert model helper
 			var roleResourceVal *v2.Resource
 			if role.Type == roleTypeCustom {

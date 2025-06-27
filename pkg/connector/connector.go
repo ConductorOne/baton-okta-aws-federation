@@ -28,7 +28,6 @@ type Okta struct {
 	clientV5            *oktav5.APIClient
 	domain              string
 	apiToken            string
-	syncCustomRoles     bool
 	skipSecondaryEmails bool
 	awsConfig           *awsConfig
 	userRoleCache       sync.Map
@@ -79,7 +78,6 @@ type Config struct {
 	Cache                                                 bool
 	CacheTTI                                              int32
 	CacheTTL                                              int32
-	SyncCustomRoles                                       bool
 	SkipSecondaryEmails                                   bool
 	AWSOktaAppId                                          string
 	AWSSourceIdentityMode                                 bool
@@ -160,10 +158,6 @@ func (c *Okta) ListResourceTypes(ctx context.Context, request *v2.ResourceTypesS
 		resourceTypeUser,
 		resourceTypeGroup,
 		resourceTypeAccount,
-	}
-
-	if c.syncCustomRoles {
-		resourceTypes = append(resourceTypes, resourceTypeCustomRole, resourceTypeResourceSets, resourceTypeResourceSetsBindings)
 	}
 
 	return &v2.ResourceTypesServiceListResourceTypesResponse{
@@ -326,7 +320,6 @@ func New(ctx context.Context, cfg *Config) (*Okta, error) {
 		clientV5:            oktaClientV5,
 		domain:              cfg.Domain,
 		apiToken:            cfg.ApiToken,
-		syncCustomRoles:     cfg.SyncCustomRoles,
 		skipSecondaryEmails: cfg.SkipSecondaryEmails,
 		awsConfig:           awsConfig,
 	}, nil

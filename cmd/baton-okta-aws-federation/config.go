@@ -16,7 +16,6 @@ var (
 	cache               = field.BoolField("cache", field.WithDescription("Enable response cache"), field.WithDefaultValue(true))
 	cacheTTI            = field.IntField("cache-tti", field.WithDescription("Response cache cleanup interval in seconds"), field.WithDefaultValue(60))
 	cacheTTL            = field.IntField("cache-ttl", field.WithDescription("Response cache time to live in seconds"), field.WithDefaultValue(300))
-	syncCustomRoles     = field.BoolField("sync-custom-roles", field.WithDescription("Enable syncing custom roles"), field.WithDefaultValue(false))
 	skipSecondaryEmails = field.BoolField("skip-secondary-emails", field.WithDescription("Skip syncing secondary emails"), field.WithDefaultValue(false))
 )
 
@@ -26,7 +25,6 @@ var configuration = field.NewConfiguration([]field.SchemaField{
 	cache,
 	cacheTTI,
 	cacheTTL,
-	syncCustomRoles,
 	skipSecondaryEmails,
 	awsOktaAppId,
 	awsSourceIdentityMode,
