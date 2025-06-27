@@ -121,12 +121,6 @@ var (
 		Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_GROUP},
 		Annotations: v1AnnotationsForResourceType("group", false),
 	}
-	resourceTypeApp = &v2.ResourceType{
-		Id:          "app",
-		DisplayName: "App",
-		Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_APP},
-		Annotations: v1AnnotationsForResourceType("app", false),
-	}
 	resourceTypeAccount = &v2.ResourceType{
 		Id:          "account",
 		DisplayName: "Account",
