@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 
-	"github.com/conductorone/baton-okta/pkg/connector"
+	"github.com/conductorone/baton-okta-aws-federation/pkg/connector"
 	configschema "github.com/conductorone/baton-sdk/pkg/config"
 )
 
@@ -19,7 +19,7 @@ var version = "dev"
 
 func main() {
 	ctx := context.Background()
-	_, cmd, err := configschema.DefineConfiguration(ctx, "baton-okta", getConnector, configuration)
+	_, cmd, err := configschema.DefineConfiguration(ctx, "baton-okta-aws-federation", getConnector, configuration)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)

@@ -1,21 +1,21 @@
 version: 2
-project_name: baton-okta
+project_name: baton-okta-aws-federation
 builds:
-  - binary: baton-okta
+  - binary: baton-okta-aws-federation
     env:
       - CGO_ENABLED=0
     id: linux
-    main: ./cmd/baton-okta
+    main: ./cmd/baton-okta-aws-federation
     goos:
       - linux
     goarch:
       - amd64
       - arm64
-  - binary: baton-okta
+  - binary: baton-okta-aws-federation
     env:
       - CGO_ENABLED=0
     id: macos-amd64
-    main: ./cmd/baton-okta
+    main: ./cmd/baton-okta-aws-federation
     goos:
       - darwin
     goarch:
@@ -23,12 +23,12 @@ builds:
     hooks:
       post:
         - gon .gon-amd64.json
-        - mv dist/baton-okta-darwin-amd64.signed.zip dist/macos-amd64_darwin_amd64_v1/baton-okta
-  - binary: baton-okta
+        - mv dist/baton-okta-aws-federation-darwin-amd64.signed.zip dist/macos-amd64_darwin_amd64_v1/baton-okta-aws-federation
+  - binary: baton-okta-aws-federation
     env:
       - CGO_ENABLED=0
     id: macos-arm64
-    main: ./cmd/baton-okta
+    main: ./cmd/baton-okta-aws-federation
     goos:
       - darwin
     goarch:
@@ -36,7 +36,7 @@ builds:
     hooks:
       post:
         - gon .gon-arm64.json
-        - mv dist/baton-okta-darwin-arm64.signed.zip dist/macos-arm64_darwin_arm64_v8.0/baton-okta
+        - mv dist/baton-okta-aws-federation-darwin-arm64.signed.zip dist/macos-arm64_darwin_arm64_v8.0/baton-okta-aws-federation
 archives:
   - id: linux-archive
     builds:
@@ -72,9 +72,9 @@ brews:
     directory: Formula
     homepage: https://conductorone.com
     test: |
-      system "#{bin}/baton-okta -v"
+      system "#{bin}/baton-okta-aws-federation -v"
     install: |-
-      bin.install "baton-okta"
+      bin.install "baton-okta-aws-federation"
 changelog:
   filters:
     exclude:

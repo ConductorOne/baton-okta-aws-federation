@@ -1,4 +1,4 @@
-module github.com/conductorone/baton-okta
+module github.com/conductorone/baton-okta-aws-federation
 
 go 1.23.4
 
