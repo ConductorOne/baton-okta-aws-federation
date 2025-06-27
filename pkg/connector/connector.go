@@ -31,7 +31,6 @@ type Okta struct {
 	syncCustomRoles     bool
 	skipSecondaryEmails bool
 	awsConfig           *awsConfig
-	SyncSecrets         bool
 	userRoleCache       sync.Map
 }
 
@@ -86,7 +85,6 @@ type Config struct {
 	AWSOktaAppId                                          string
 	AWSSourceIdentityMode                                 bool
 	AllowGroupToDirectAssignmentConversionForProvisioning bool
-	SyncSecrets                                           bool
 }
 
 func v1AnnotationsForResourceType(resourceTypeID string, skipEntitlementsAndGrants bool) annotations.Annotations {
@@ -148,12 +146,6 @@ var (
 		DisplayName: "Resource Set Binding",
 		Annotations: v1AnnotationsForResourceType("resourceset-binding", false),
 	}
-	resourceTypeApiToken = &v2.ResourceType{
-		Id:          "api-token",
-		DisplayName: "API Token",
-		Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_SECRET},
-		Annotations: v1AnnotationsForResourceType("api-token", true),
-	}
 )
 
 func (o *Okta) ResourceSyncers(ctx context.Context) []connectorbuilder.ResourceSyncer {
@@ -173,10 +165,6 @@ func (c *Okta) ListResourceTypes(ctx context.Context, request *v2.ResourceTypesS
 
 	if c.syncCustomRoles {
 		resourceTypes = append(resourceTypes, resourceTypeCustomRole, resourceTypeResourceSets, resourceTypeResourceSetsBindings)
-	}
-
-	if c.SyncSecrets {
-		resourceTypes = append(resourceTypes, resourceTypeApiToken)
 	}
 
 	return &v2.ResourceTypesServiceListResourceTypesResponse{
@@ -341,7 +329,6 @@ func New(ctx context.Context, cfg *Config) (*Okta, error) {
 		apiToken:            cfg.ApiToken,
 		syncCustomRoles:     cfg.SyncCustomRoles,
 		skipSecondaryEmails: cfg.SkipSecondaryEmails,
-		SyncSecrets:         cfg.SyncSecrets,
 		awsConfig:           awsConfig,
 	}, nil
 }

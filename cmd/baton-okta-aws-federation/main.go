@@ -47,7 +47,6 @@ func getConnector(ctx context.Context, v *viper.Viper) (types.ConnectorServer, e
 		AWSOktaAppId:          v.GetString("aws-okta-app-id"),
 		AWSSourceIdentityMode: v.GetBool("aws-source-identity-mode"),
 		AllowGroupToDirectAssignmentConversionForProvisioning: v.GetBool("aws-allow-group-to-direct-assignment-conversion-for-provisioning"),
-		SyncSecrets: v.GetBool("sync-secrets"),
 	}
 
 	cb, err := connector.New(ctx, ccfg)
