@@ -29,7 +29,7 @@ var (
 	awsSourceIdentityMode = field.BoolField("aws-source-identity-mode",
 		field.WithDisplayName("AWS source identity mode"),
 		field.WithDescription("Enable AWS source identity mode. When set, user and group identities are loaded from the source connector .c1z file"),
-		field.WithDefaultValue(false),
+		field.WithDefaultValue(true),
 	)
 
 	awsOktaAppId = field.StringField("aws-okta-app-id",
