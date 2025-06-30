@@ -8,7 +8,6 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
 	"github.com/conductorone/baton-sdk/pkg/types"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
-	"github.com/spf13/viper"
 	"go.uber.org/zap"
 
 	"github.com/conductorone/baton-okta-aws-federation/pkg/config"
@@ -34,18 +33,37 @@ func main() {
 	}
 }
 
-func getConnector(ctx context.Context, v *viper.Viper) (types.ConnectorServer, error) {
+// safeCacheInt32 converts int to int32 with bounds checking.
+func safeCacheInt32(val int) (int32, error) {
+	if val > 2147483647 || val < 0 {
+		return 0, fmt.Errorf("value %d is out of range for int32", val)
+	}
+	return int32(val), nil
+}
+
+func getConnector(ctx context.Context, oaf *config.OktaAwsFederation) (types.ConnectorServer, error) {
 	l := ctxzap.Extract(ctx)
+
+	cacheTTI, err := safeCacheInt32(oaf.CacheTti)
+	if err != nil {
+		return nil, err
+	}
+
+	cacheTTL, err := safeCacheInt32(oaf.CacheTtl)
+	if err != nil {
+		return nil, err
+	}
+
 	ccfg := &connector.Config{
-		Domain:                v.GetString("domain"),
-		ApiToken:              v.GetString("api-token"),
-		Cache:                 v.GetBool("cache"),
-		CacheTTI:              v.GetInt32("cache-tti"),
-		CacheTTL:              v.GetInt32("cache-ttl"),
-		SkipSecondaryEmails:   v.GetBool("skip-secondary-emails"),
-		AWSOktaAppId:          v.GetString("aws-okta-app-id"),
-		AWSSourceIdentityMode: v.GetBool("aws-source-identity-mode"),
-		AllowGroupToDirectAssignmentConversionForProvisioning: v.GetBool("aws-allow-group-to-direct-assignment-conversion-for-provisioning"),
+		Domain:                oaf.Domain,
+		ApiToken:              oaf.ApiToken,
+		Cache:                 oaf.Cache,
+		CacheTTI:              cacheTTI,
+		CacheTTL:              cacheTTL,
+		SkipSecondaryEmails:   oaf.SkipSecondaryEmails,
+		AWSOktaAppId:          oaf.AwsOktaAppId,
+		AWSSourceIdentityMode: oaf.AwsSourceIdentityMode,
+		AllowGroupToDirectAssignmentConversionForProvisioning: oaf.AwsAllowGroupToDirectAssignmentConversionForProvisioning,
 	}
 
 	cb, err := connector.New(ctx, ccfg)
