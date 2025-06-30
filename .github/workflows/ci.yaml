@@ -41,15 +41,15 @@ jobs:
     runs-on: ubuntu-latest
     env:
       BATON_LOG_LEVEL: debug
-      # Add any environment variables needed to run baton-bitbucket-datacenter
+      # Add any environment variables needed to run baton-okta-aws-federation
       BATON_API_TOKEN: ${{ secrets.BATON_API_TOKEN }}
       BATON_DOMAIN: ${{ secrets.BATON_DOMAIN }}
-      BATON_SYNC_CUSTOM_ROLES: true
+      BATON_AWS_OKTA_APP_ID: ${{ secrets.BATON_AWS_OKTA_APP_ID }}
       # The following parameters are passed to grant/revoke commands
-      CONNECTOR_GRANT: 'app:0oaf4rf37pg7W4B6a5d7:access:user:00uacdfcbiu3Igbmz5d7'
-      CONNECTOR_ENTITLEMENT: 'app:0oaf4rf37pg7W4B6a5d7:access'
+      CONNECTOR_GRANT: 'account:166786020837:ConductorOneIntegrationAWSConnectorTest:user:00u9v0dr25mnwWRbK5d7'
+      CONNECTOR_ENTITLEMENT: 'account:166786020837:ConductorOneIntegrationAWSConnectorTest'
       CONNECTOR_PRINCIPAL_TYPE: 'user'
-      CONNECTOR_PRINCIPAL: '00uacdfcbiu3Igbmz5d7'
+      CONNECTOR_PRINCIPAL: '00u9v0dr25mnwWRbK5d7'
     steps:
       - name: Install Go
         uses: actions/setup-go@v5
@@ -63,33 +63,21 @@ jobs:
         run: go build ./cmd/baton-okta-aws-federation
       - name: Run baton-okta-aws-federation
         run: ./baton-okta-aws-federation
-      - name: Grant entitlement (even though it probably already exists)
-        run: |
-          ./baton-okta-aws-federation --grant-entitlement ${{ env.CONNECTOR_ENTITLEMENT }} --grant-principal ${{ env.CONNECTOR_PRINCIPAL }} --grant-principal-type ${{ env.CONNECTOR_PRINCIPAL_TYPE }}
-      - name: Check for grant before revoking
-        run: |
-          ./baton-okta-aws-federation && baton grants --entitlement ${{ env.CONNECTOR_ENTITLEMENT }} --output-format=json | jq -e ".grants | any(.principal.id.resource ==\"${{ env.CONNECTOR_PRINCIPAL }}\")"
-      - name: Revoke grants
-        run: |
-          ./baton-okta-aws-federation --revoke-grant ${{ env.CONNECTOR_GRANT }}
-      - name: Check grant was revoked
-        run: |
-           ./baton-okta-aws-federation && baton grants --entitlement ${{ env.CONNECTOR_ENTITLEMENT }} --output-format=json | jq -e ".grants | any(.principal.id.resource !=\"${{ env.CONNECTOR_PRINCIPAL }}\")"
-      - name: Grant entitlement
-        run: | 
-          ./baton-okta-aws-federation && ./baton-okta-aws-federation --grant-entitlement ${{ env.CONNECTOR_ENTITLEMENT }} --grant-principal ${{ env.CONNECTOR_PRINCIPAL }} --grant-principal-type ${{ env.CONNECTOR_PRINCIPAL_TYPE }}
-      - name: Check grant was re-granted
+      # - name: Grant entitlement (even though it probably already exists)
+      #   run: |
+      #     ./baton-okta-aws-federation --grant-entitlement ${{ env.CONNECTOR_ENTITLEMENT }} --grant-principal ${{ env.CONNECTOR_PRINCIPAL }} --grant-principal-type ${{ env.CONNECTOR_PRINCIPAL_TYPE }}
+      - name: Check for grant
         run: |
           ./baton-okta-aws-federation && baton grants --entitlement ${{ env.CONNECTOR_ENTITLEMENT }} --output-format=json | jq -e ".grants | any(.principal.id.resource ==\"${{ env.CONNECTOR_PRINCIPAL }}\")"
-      - name: Grant custom roles for users
-        env:
-            BATON_ENTITLEMENT: 'resourceset-binding:iamkg0dn9dH05taAc5d7:cr0kg059ztsV0pNMh5d7:member'
-            BATON_PRINCIPAL_TYPE: 'user'
-            BATON_PRINCIPAL: '00uacdfcbiu3Igbmz5d7'
-        run: | 
-          ./baton-okta-aws-federation && ./baton-okta-aws-federation --grant-entitlement ${{ env.BATON_ENTITLEMENT }} --grant-principal ${{ env.BATON_PRINCIPAL }} --grant-principal-type ${{ env.BATON_PRINCIPAL_TYPE }}
-      - name: Revoke custom role grants
-        env:
-          BATON_GRANT: 'resourceset-binding:iamkg0dn9dH05taAc5d7:cr0kg059ztsV0pNMh5d7:member:user:00uacdfcbiu3Igbmz5d7'
-        run: |
-           ./baton-okta-aws-federation && ./baton-okta-aws-federation --revoke-grant ${{ env.BATON_GRANT }}
+      # - name: Revoke grants
+      #   run: |
+      #     ./baton-okta-aws-federation --revoke-grant ${{ env.CONNECTOR_GRANT }}
+      # - name: Check grant was revoked
+      #   run: |
+      #      ./baton-okta-aws-federation && baton grants --entitlement ${{ env.CONNECTOR_ENTITLEMENT }} --output-format=json | jq -e ".grants | any(.principal.id.resource !=\"${{ env.CONNECTOR_PRINCIPAL }}\")"
+      # - name: Grant entitlement
+      #   run: | 
+      #     ./baton-okta-aws-federation && ./baton-okta-aws-federation --grant-entitlement ${{ env.CONNECTOR_ENTITLEMENT }} --grant-principal ${{ env.CONNECTOR_PRINCIPAL }} --grant-principal-type ${{ env.CONNECTOR_PRINCIPAL_TYPE }}
+      # - name: Check grant was re-granted
+      #   run: |
+      #     ./baton-okta-aws-federation && baton grants --entitlement ${{ env.CONNECTOR_ENTITLEMENT }} --output-format=json | jq -e ".grants | any(.principal.id.resource ==\"${{ env.CONNECTOR_PRINCIPAL }}\")"
