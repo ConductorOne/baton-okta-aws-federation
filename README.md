@@ -116,7 +116,6 @@ Flags:
       --api-token string                                                   required: The API token for the service account ($BATON_API_TOKEN)
       --aws-allow-group-to-direct-assignment-conversion-for-provisioning   Whether to allow group to direct assignment conversion when provisioning ($BATON_AWS_ALLOW_GROUP_TO_DIRECT_ASSIGNMENT_CONVERSION_FOR_PROVISIONING)
       --aws-okta-app-id string                                             required: The Okta app id for the AWS application ($BATON_AWS_OKTA_APP_ID)
-      --aws-source-identity-mode                                           Enable AWS source identity mode. When set, user and group identities are loaded from the source connector .c1z file ($BATON_AWS_SOURCE_IDENTITY_MODE)
       --cache                                                              Enable response cache ($BATON_CACHE) (default true)
       --cache-tti int                                                      Response cache cleanup interval in seconds ($BATON_CACHE_TTI) (default 60)
       --cache-ttl int                                                      Response cache time to live in seconds ($BATON_CACHE_TTL) (default 300)
@@ -132,7 +131,6 @@ Flags:
       --otel-collector-endpoint string                                     The endpoint of the OpenTelemetry collector to send observability data to (used for both tracing and logging if specific endpoints are not provided) ($BATON_OTEL_COLLECTOR_ENDPOINT)
   -p, --provisioning                                                       This must be set in order for provisioning actions to be enabled ($BATON_PROVISIONING)
       --skip-full-sync                                                     This must be set to skip a full sync ($BATON_SKIP_FULL_SYNC)
-      --skip-secondary-emails                                              Skip syncing secondary emails ($BATON_SKIP_SECONDARY_EMAILS)
       --sync-resources strings                                             The resource IDs to sync ($BATON_SYNC_RESOURCES)
       --ticketing                                                          This must be set to enable ticketing support ($BATON_TICKETING)
   -v, --version                                                            version for baton-okta-aws-federation
