@@ -91,18 +91,6 @@ func v1AnnotationsForResourceType(resourceTypeID string, skipEntitlementsAndGran
 }
 
 var (
-	resourceTypeRole = &v2.ResourceType{
-		Id:          "role",
-		DisplayName: "Role",
-		Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_ROLE},
-		Annotations: v1AnnotationsForResourceType("role", false),
-	}
-	resourceTypeCustomRole = &v2.ResourceType{
-		Id:          "custom-role",
-		DisplayName: "Custom Role",
-		Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_ROLE},
-		Annotations: v1AnnotationsForResourceType("custom-role", false),
-	}
 	resourceTypeUser = &v2.ResourceType{
 		Id:          "user",
 		DisplayName: "User",

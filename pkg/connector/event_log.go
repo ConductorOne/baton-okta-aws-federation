@@ -42,7 +42,6 @@ func (connector *Okta) ListEvents(
 	// MJP this will eventually come from config/request?
 	activeFilters := []EventFilter{
 		GroupChangeFilter,
-		RoleMembershipFilter,
 		UserLifecycleFilter,
 	}
 

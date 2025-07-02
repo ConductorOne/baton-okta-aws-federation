@@ -28,33 +28,6 @@ var (
 			return nil
 		},
 	}
-	RoleMembershipFilter = EventFilter{
-		EventTypes:  mapset.NewSet[string]("user.account.privilege.grant"),
-		TargetTypes: mapset.NewSet[string]("ROLE", "User"),
-		EventHandler: func(event *oktaSDK.LogEvent, targetMap map[string][]*oktaSDK.LogTarget, rv *v2.Event) error {
-			if len(targetMap["ROLE"]) != 1 {
-				return fmt.Errorf("okta-connectorv2: expected 1 ROLE target, got %d", len(targetMap["ROLE"]))
-			}
-			role := targetMap["ROLE"][0]
-
-			// for some reason we don't get the role ID (or type) formatted properly.
-			// hack to look it up via DisplayName
-			roleType := StandardRoleTypeFromLabel(role.DisplayName)
-			if roleType == nil {
-				return fmt.Errorf("okta-connectorv2: error getting role from label: %s", role.DisplayName)
-			}
-
-			rv.Event = &v2.Event_ResourceChangeEvent{
-				ResourceChangeEvent: &v2.ResourceChangeEvent{
-					ResourceId: &v2.ResourceId{
-						ResourceType: resourceTypeRole.Id,
-						Resource:     roleType.Type,
-					},
-				},
-			}
-			return nil
-		},
-	}
 	UserLifecycleFilter = EventFilter{
 		EventTypes:  mapset.NewSet[string]("user.lifecycle.create", "user.lifecycle.activate", "user.account.update_profile"),
 		TargetTypes: mapset.NewSet[string]("User"),
