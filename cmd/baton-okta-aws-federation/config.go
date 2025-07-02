@@ -10,8 +10,6 @@ var (
 
 	awsAllowGroupToDirectAssignmentConversionForProvisioning = field.BoolField("aws-allow-group-to-direct-assignment-conversion-for-provisioning",
 		field.WithDescription("Whether to allow group to direct assignment conversion when provisioning"))
-	awsSourceIdentityMode = field.BoolField("aws-source-identity-mode",
-		field.WithDescription("Enable AWS source identity mode. When set, user and group identities are loaded from the source connector .c1z file"))
 	awsOktaAppId = field.StringField("aws-okta-app-id", field.WithRequired(true), field.WithDescription("The Okta app id for the AWS application"))
 
 	cache               = field.BoolField("cache", field.WithDescription("Enable response cache"), field.WithDefaultValue(true))
@@ -28,6 +26,5 @@ var configuration = field.NewConfiguration([]field.SchemaField{
 	cacheTTL,
 	skipSecondaryEmails,
 	awsOktaAppId,
-	awsSourceIdentityMode,
 	awsAllowGroupToDirectAssignmentConversionForProvisioning,
 })

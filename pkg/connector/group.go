@@ -7,8 +7,6 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/conductorone/baton-sdk/pkg/ratelimit"
-	sdkResource "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/structpb"
 
@@ -39,47 +37,8 @@ func (o *groupResourceType) List(
 	resourceID *v2.ResourceId,
 	token *pagination.Token,
 ) ([]*v2.Resource, string, annotations.Annotations, error) {
-	bag, page, err := parsePageToken(token.Token, &v2.ResourceId{ResourceType: resourceTypeGroup.Id})
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("okta-connectorv2: failed to parse page token: %w", err)
-	}
-
 	var rv []*v2.Resource
-	var groups []*okta.Group
-	var respCtx *responseContext
-	if o.connector.awsConfig.AWSSourceIdentityMode {
-		return rv, "", nil, nil
-	}
-	groups, respCtx, err = o.listAWSGroups(ctx, token, page)
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("okta-connectorv2: failed to list app groups: %w", err)
-	}
-
-	nextPage, annos, err := parseResp(respCtx.OktaResponse)
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("okta-connectorv2: failed to parse response: %w", err)
-	}
-
-	err = bag.Next(nextPage)
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("okta-connectorv2: failed to fetch bag.Next: %w", err)
-	}
-
-	for _, group := range groups {
-		resource, err := o.groupResource(ctx, group)
-		if err != nil {
-			return nil, "", nil, err
-		}
-
-		rv = append(rv, resource)
-	}
-
-	pageToken, err := bag.Marshal()
-	if err != nil {
-		return nil, "", nil, err
-	}
-
-	return rv, pageToken, annos, nil
+	return rv, "", nil, nil
 }
 
 func (o *groupResourceType) Entitlements(
@@ -88,12 +47,6 @@ func (o *groupResourceType) Entitlements(
 	token *pagination.Token,
 ) ([]*v2.Entitlement, string, annotations.Annotations, error) {
 	var rv []*v2.Entitlement
-	if o.connector.awsConfig.AWSSourceIdentityMode {
-		return rv, "", nil, nil
-	}
-
-	rv = append(rv, o.groupEntitlement(ctx, resource))
-
 	return rv, "", nil, nil
 }
 
@@ -118,168 +71,8 @@ func (o *groupResourceType) Grants(
 	resource *v2.Resource,
 	token *pagination.Token,
 ) ([]*v2.Grant, string, annotations.Annotations, error) {
-	l := ctxzap.Extract(ctx)
-
 	var rv []*v2.Grant
-	bag := &pagination.Bag{}
-	err := bag.Unmarshal(token.Token)
-	if err != nil {
-		return nil, "", nil, err
-	}
-
-	if o.connector.awsConfig.AWSSourceIdentityMode {
-		return rv, "", nil, nil
-	}
-
-	if bag.Current() == nil {
-		bag.Push(pagination.PageState{
-			ResourceTypeID: resourceTypeUser.Id,
-		})
-	}
-
-	page := bag.PageToken()
-
-	groupID := resource.Id.GetResource()
-
-	switch bag.ResourceTypeID() {
-	case resourceTypeUser.Id:
-		groupTrait, err := sdkResource.GetGroupTrait(resource)
-		if err != nil {
-			return nil, "", nil, fmt.Errorf("okta-connectorv2: failed to get group trait: %w", err)
-		}
-		usersCount, ok := sdkResource.GetProfileInt64Value(groupTrait.Profile, usersCountProfileKey)
-
-		var annos annotations.Annotations
-		nextPage := ""
-		if !ok || usersCount > 0 {
-			if !ok {
-				l.Debug("okta-connectorv2: making list group users call because users_count profile attribute was not present")
-			}
-
-			qp := queryParams(token.Size, page)
-
-			users, respCtx, err := o.listGroupUsers(ctx, groupID, token, qp)
-			if err != nil {
-				return nil, "", nil, convertNotFoundError(err, "okta-connectorv2: failed to list group users")
-			}
-
-			nextPage, annos, err = parseResp(respCtx.OktaResponse)
-			if err != nil {
-				return nil, "", nil, fmt.Errorf("okta-connectorv2: failed to parse response: %w", err)
-			}
-
-			for _, user := range users {
-				rv = append(rv, groupGrant(resource, user))
-			}
-		} else {
-			l.Debug("okta-connectorv2: skipping list group users")
-		}
-
-		err = bag.Next(nextPage)
-		if err != nil {
-			return nil, "", nil, fmt.Errorf("okta-connectorv2: failed to fetch bag.Next: %w", err)
-		}
-
-		pageToken, err := bag.Marshal()
-		if err != nil {
-			return nil, "", nil, err
-		}
-
-		if pageToken == "" {
-			etag := &v2.ETag{
-				Value: time.Now().UTC().Format(time.RFC3339Nano),
-			}
-			annos.Update(etag)
-		}
-
-		return rv, pageToken, annos, nil
-	case resourceTypeRole.Id:
-		roles, resp, err := listGroupAssignedRoles(ctx, o.connector.client, groupID, nil)
-		if err != nil {
-			if resp == nil {
-				return nil, "", nil, fmt.Errorf("okta-connectorv2: failed to list group roles: %w", err)
-			}
-
-			defer resp.Body.Close()
-			errOkta, err := getError(resp)
-			if err != nil {
-				return nil, "", nil, err
-			}
-			if errOkta.ErrorCode == AccessDeniedErrorCode {
-				err = bag.Next("")
-				if err != nil {
-					return nil, "", nil, err
-				}
-				pageToken, err := bag.Marshal()
-				if err != nil {
-					return nil, "", nil, err
-				}
-				return nil, pageToken, nil, nil
-			} else {
-				return nil, "", nil, convertNotFoundError(&errOkta, "okta-connectorv2: failed to list group roles")
-			}
-		}
-
-		for _, role := range roles {
-			if role.Status == roleStatusInactive || role.AssignmentType != "GROUP" {
-				continue
-			}
-
-			// TODO(lauren) convert model helper
-			var roleResourceVal *v2.Resource
-			if role.Type == roleTypeCustom {
-				roleResourceVal, err = roleResource(ctx, &okta.Role{
-					Id:    role.Role,
-					Label: role.Label,
-				}, resourceTypeCustomRole)
-			} else {
-				roleResourceVal, err = roleResource(ctx, &okta.Role{
-					Id:    role.Role,
-					Label: role.Label,
-					Type:  role.Type,
-				}, resourceTypeRole)
-			}
-			if err != nil {
-				return nil, "", nil, err
-			}
-
-			groupTrait, err := sdkResource.GetGroupTrait(resource)
-			if err != nil {
-				return nil, "", nil, fmt.Errorf("okta-connectorv2: failed to get group trait: %w", err)
-			}
-			usersCount, ok := sdkResource.GetProfileInt64Value(groupTrait.Profile, usersCountProfileKey)
-			shouldExpand := !ok || usersCount > 0
-			if !shouldExpand {
-				l.Debug("okta-connectorv2: skipping expand for role group grant since users_count is 0")
-			}
-			rv = append(rv, roleGroupGrant(groupID, roleResourceVal, shouldExpand))
-		}
-
-		// TODO(lauren) Move this to list method like other methods do
-		respCtx, err := responseToContext(token, resp)
-		if err != nil {
-			return nil, "", nil, err
-		}
-
-		nextPage, annos, err := parseResp(respCtx.OktaResponse)
-		if err != nil {
-			return nil, "", nil, fmt.Errorf("okta-connectorv2: failed to parse response: %w", err)
-		}
-
-		err = bag.Next(nextPage)
-		if err != nil {
-			return nil, "", nil, fmt.Errorf("okta-connectorv2: failed to fetch bag.Next: %w", err)
-		}
-
-		pageToken, err := bag.Marshal()
-		if err != nil {
-			return nil, "", nil, err
-		}
-
-		return rv, pageToken, annos, nil
-	default:
-		return nil, "", nil, fmt.Errorf("okta-connector: invalid grant resource type: %s", bag.ResourceTypeID())
-	}
+	return rv, "", nil, nil
 }
 
 func listGroupsHelper(ctx context.Context, client *okta.Client, token *pagination.Token, qp *query.Params) ([]*okta.Group, *responseContext, error) {
@@ -570,35 +363,8 @@ func embeddedOktaGroupFromAppGroup(appGroup *okta.ApplicationGroupAssignment) (*
 }
 
 func (o *groupResourceType) Get(ctx context.Context, resourceId *v2.ResourceId, parentResourceId *v2.ResourceId) (*v2.Resource, annotations.Annotations, error) {
-	l := ctxzap.Extract(ctx)
-	l.Debug("getting group", zap.String("group_id", resourceId.Resource))
-
 	var annos annotations.Annotations
-
-	var group *okta.Group
-	var resp *okta.Response
-	var err error
-	if o.connector.awsConfig.AWSSourceIdentityMode {
-		return nil, annos, nil
-	}
-	group, resp, err = o.getAWSGroup(ctx, resourceId.Resource)
-
-	if err != nil {
-		return nil, nil, handleOktaResponseError(resp, err)
-	}
-
-	if resp != nil {
-		if desc, err := ratelimit.ExtractRateLimitData(resp.Response.StatusCode, &resp.Response.Header); err == nil {
-			annos.WithRateLimiting(desc)
-		}
-	}
-
-	resource, err := o.groupResource(ctx, group)
-	if err != nil {
-		return nil, annos, err
-	}
-
-	return resource, annos, nil
+	return nil, annos, nil
 }
 
 func (o *groupResourceType) getAWSGroup(ctx context.Context, groupId string) (*okta.Group, *okta.Response, error) {

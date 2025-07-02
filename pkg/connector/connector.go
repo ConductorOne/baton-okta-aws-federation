@@ -34,7 +34,6 @@ type awsConfig struct {
 	OktaAppId                                             string
 	awsAppConfigCacheMutex                                sync.Mutex
 	oktaAWSAppSettings                                    *oktaAWSAppSettings
-	AWSSourceIdentityMode                                 bool
 	AllowGroupToDirectAssignmentConversionForProvisioning bool
 }
 
@@ -77,7 +76,6 @@ type Config struct {
 	CacheTTL                                              int32
 	SkipSecondaryEmails                                   bool
 	AWSOktaAppId                                          string
-	AWSSourceIdentityMode                                 bool
 	AllowGroupToDirectAssignmentConversionForProvisioning bool
 }
 
@@ -128,9 +126,6 @@ var (
 
 func (o *Okta) ResourceSyncers(ctx context.Context) []connectorbuilder.ResourceSyncer {
 	resourceSyncer := []connectorbuilder.ResourceSyncer{accountBuilder(o), groupBuilder(o)}
-	if !o.awsConfig.AWSSourceIdentityMode {
-		resourceSyncer = append(resourceSyncer, userBuilder(o))
-	}
 	return resourceSyncer
 }
 
@@ -276,8 +271,7 @@ func New(ctx context.Context, cfg *Config) (*Okta, error) {
 	}
 
 	awsConfig := &awsConfig{
-		OktaAppId:             cfg.AWSOktaAppId,
-		AWSSourceIdentityMode: cfg.AWSSourceIdentityMode,
+		OktaAppId: cfg.AWSOktaAppId,
 		AllowGroupToDirectAssignmentConversionForProvisioning: cfg.AllowGroupToDirectAssignmentConversionForProvisioning,
 	}
 

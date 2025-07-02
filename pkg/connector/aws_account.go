@@ -401,18 +401,14 @@ func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Reso
 
 func (o *accountResourceType) accountGrant(resource *v2.Resource, samlRole string, oktaUserId string) *v2.Grant {
 	grantOpts := make([]sdkGrant.GrantOption, 0)
-	if o.connector.awsConfig.AWSSourceIdentityMode {
-		grantOpts = append(grantOpts, sdkGrant.WithAnnotation(&v2.ExternalResourceMatchID{Id: oktaUserId}))
-	}
+	grantOpts = append(grantOpts, sdkGrant.WithAnnotation(&v2.ExternalResourceMatchID{Id: oktaUserId}))
 	ur := &v2.Resource{Id: &v2.ResourceId{ResourceType: resourceTypeUser.Id, Resource: oktaUserId}}
 	return sdkGrant.NewGrant(resource, samlRole, ur, grantOpts...)
 }
 
 func (o *accountResourceType) accountGrantGroup(resource *v2.Resource, samlRole string, groupId string) *v2.Grant {
 	grantOpts := make([]sdkGrant.GrantOption, 0)
-	if o.connector.awsConfig.AWSSourceIdentityMode {
-		grantOpts = append(grantOpts, sdkGrant.WithAnnotation(&v2.ExternalResourceMatchID{Id: groupId}))
-	}
+	grantOpts = append(grantOpts, sdkGrant.WithAnnotation(&v2.ExternalResourceMatchID{Id: groupId}))
 	gr := &v2.Resource{Id: &v2.ResourceId{ResourceType: resourceTypeGroup.Id, Resource: groupId}}
 	return sdkGrant.NewGrant(resource, samlRole, gr, grantOpts...)
 }
@@ -422,16 +418,14 @@ func (o *accountResourceType) accountGrantGroupExpandable(resource *v2.Resource,
 	gr := &v2.Resource{Id: rID}
 
 	grantOpts := make([]sdkGrant.GrantOption, 0)
-	expandEntitlementId := fmt.Sprintf("group:%s:member", groupId)
-	if o.connector.awsConfig.AWSSourceIdentityMode {
-		ent := sdkEntitlement.NewAssignmentEntitlement(gr, "member")
-		bidEnt, err := bid.MakeBid(ent)
-		if err != nil {
-			return nil, err
-		}
-		expandEntitlementId = bidEnt
-		grantOpts = append(grantOpts, sdkGrant.WithAnnotation(&v2.ExternalResourceMatchID{Id: groupId}))
+
+	ent := sdkEntitlement.NewAssignmentEntitlement(gr, "member")
+	bidEnt, err := bid.MakeBid(ent)
+	if err != nil {
+		return nil, err
 	}
+	expandEntitlementId := bidEnt
+	grantOpts = append(grantOpts, sdkGrant.WithAnnotation(&v2.ExternalResourceMatchID{Id: groupId}))
 
 	grantOpts = append(grantOpts, sdkGrant.WithAnnotation(&v2.GrantExpandable{
 		EntitlementIds: []string{expandEntitlementId},

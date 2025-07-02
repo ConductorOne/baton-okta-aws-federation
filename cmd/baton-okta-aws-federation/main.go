@@ -36,14 +36,13 @@ func main() {
 func getConnector(ctx context.Context, v *viper.Viper) (types.ConnectorServer, error) {
 	l := ctxzap.Extract(ctx)
 	ccfg := &connector.Config{
-		Domain:                v.GetString("domain"),
-		ApiToken:              v.GetString("api-token"),
-		Cache:                 v.GetBool("cache"),
-		CacheTTI:              v.GetInt32("cache-tti"),
-		CacheTTL:              v.GetInt32("cache-ttl"),
-		SkipSecondaryEmails:   v.GetBool("skip-secondary-emails"),
-		AWSOktaAppId:          v.GetString("aws-okta-app-id"),
-		AWSSourceIdentityMode: v.GetBool("aws-source-identity-mode"),
+		Domain:              v.GetString("domain"),
+		ApiToken:            v.GetString("api-token"),
+		Cache:               v.GetBool("cache"),
+		CacheTTI:            v.GetInt32("cache-tti"),
+		CacheTTL:            v.GetInt32("cache-ttl"),
+		SkipSecondaryEmails: v.GetBool("skip-secondary-emails"),
+		AWSOktaAppId:        v.GetString("aws-okta-app-id"),
 		AllowGroupToDirectAssignmentConversionForProvisioning: v.GetBool("aws-allow-group-to-direct-assignment-conversion-for-provisioning"),
 	}
 
