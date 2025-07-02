@@ -12,10 +12,9 @@ var (
 		field.WithDescription("Whether to allow group to direct assignment conversion when provisioning"))
 	awsOktaAppId = field.StringField("aws-okta-app-id", field.WithRequired(true), field.WithDescription("The Okta app id for the AWS application"))
 
-	cache               = field.BoolField("cache", field.WithDescription("Enable response cache"), field.WithDefaultValue(true))
-	cacheTTI            = field.IntField("cache-tti", field.WithDescription("Response cache cleanup interval in seconds"), field.WithDefaultValue(60))
-	cacheTTL            = field.IntField("cache-ttl", field.WithDescription("Response cache time to live in seconds"), field.WithDefaultValue(300))
-	skipSecondaryEmails = field.BoolField("skip-secondary-emails", field.WithDescription("Skip syncing secondary emails"), field.WithDefaultValue(false))
+	cache    = field.BoolField("cache", field.WithDescription("Enable response cache"), field.WithDefaultValue(true))
+	cacheTTI = field.IntField("cache-tti", field.WithDescription("Response cache cleanup interval in seconds"), field.WithDefaultValue(60))
+	cacheTTL = field.IntField("cache-ttl", field.WithDescription("Response cache time to live in seconds"), field.WithDefaultValue(300))
 )
 
 var configuration = field.NewConfiguration([]field.SchemaField{
@@ -24,7 +23,6 @@ var configuration = field.NewConfiguration([]field.SchemaField{
 	cache,
 	cacheTTI,
 	cacheTTL,
-	skipSecondaryEmails,
 	awsOktaAppId,
 	awsAllowGroupToDirectAssignmentConversionForProvisioning,
 })

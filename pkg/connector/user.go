@@ -84,7 +84,7 @@ func (o *userResourceType) List(
 	}
 
 	for _, user := range users {
-		resource, err := userResource(ctx, user, o.connector.skipSecondaryEmails)
+		resource, err := userResource(ctx, user)
 		if err != nil {
 			return nil, "", nil, err
 		}
@@ -132,7 +132,7 @@ func (o *userResourceType) listAWSAccountUsers(
 		if err != nil {
 			return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to get user from app user response: %w", err)
 		}
-		resource, err := userResource(ctx, user, o.connector.skipSecondaryEmails)
+		resource, err := userResource(ctx, user)
 		if err != nil {
 			return nil, "", nil, err
 		}
@@ -254,7 +254,7 @@ func userBuilder(connector *Okta) *userResourceType {
 }
 
 // Create a new connector resource for a okta user.
-func userResource(ctx context.Context, user *okta.User, skipSecondaryEmails bool) (*v2.Resource, error) {
+func userResource(ctx context.Context, user *okta.User) (*v2.Resource, error) {
 	firstName, lastName := userName(user)
 
 	oktaProfile := *user.Profile
@@ -282,12 +282,8 @@ func userResource(ctx context.Context, user *okta.User, skipSecondaryEmails bool
 	if email, ok := oktaProfile["email"].(string); ok && email != "" {
 		options = append(options, resource.WithEmail(email, true))
 	}
-	if secondEmail, ok := oktaProfile["secondEmail"].(string); ok && secondEmail != "" && !skipSecondaryEmails {
+	if secondEmail, ok := oktaProfile["secondEmail"].(string); ok && secondEmail != "" {
 		options = append(options, resource.WithEmail(secondEmail, false))
-	}
-
-	if skipSecondaryEmails {
-		oktaProfile["secondEmail"] = nil
 	}
 
 	employeeIDs := mapset.NewSet[string]()
@@ -390,7 +386,7 @@ func (r *userResourceType) CreateAccount(
 		return nil, nil, nil, fmt.Errorf("okta-connectorv2: failed to create user: %s", response.Status)
 	}
 
-	userResource, err := userResource(ctx, user, r.connector.skipSecondaryEmails)
+	userResource, err := userResource(ctx, user)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -515,7 +511,7 @@ func (o *userResourceType) Get(ctx context.Context, resourceId *v2.ResourceId, p
 		return nil, annos, nil
 	}
 
-	resource, err := userResource(ctx, user, o.connector.skipSecondaryEmails)
+	resource, err := userResource(ctx, user)
 	if err != nil {
 		return nil, annos, err
 	}
@@ -541,7 +537,7 @@ func (o *userResourceType) findAWSAccountUser(
 	if err != nil {
 		return nil, nil, fmt.Errorf("okta-aws-connector: failed to get user from find app user response: %w", err)
 	}
-	resource, err := userResource(ctx, user, o.connector.skipSecondaryEmails)
+	resource, err := userResource(ctx, user)
 	if err != nil {
 		return nil, nil, err
 	}

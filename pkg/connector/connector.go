@@ -23,11 +23,10 @@ const AccessDeniedErrorCode = "E0000006"
 const ExpectedGroupNameCaptureGroupsWithGroupFilterForMultipleAWSInstances = 3
 
 type Okta struct {
-	client              *okta.Client
-	domain              string
-	apiToken            string
-	skipSecondaryEmails bool
-	awsConfig           *awsConfig
+	client    *okta.Client
+	domain    string
+	apiToken  string
+	awsConfig *awsConfig
 }
 
 type awsConfig struct {
@@ -74,7 +73,6 @@ type Config struct {
 	Cache                                                 bool
 	CacheTTI                                              int32
 	CacheTTL                                              int32
-	SkipSecondaryEmails                                   bool
 	AWSOktaAppId                                          string
 	AllowGroupToDirectAssignmentConversionForProvisioning bool
 }
@@ -276,11 +274,10 @@ func New(ctx context.Context, cfg *Config) (*Okta, error) {
 	}
 
 	return &Okta{
-		client:              oktaClient,
-		domain:              cfg.Domain,
-		apiToken:            cfg.ApiToken,
-		skipSecondaryEmails: cfg.SkipSecondaryEmails,
-		awsConfig:           awsConfig,
+		client:    oktaClient,
+		domain:    cfg.Domain,
+		apiToken:  cfg.ApiToken,
+		awsConfig: awsConfig,
 	}, nil
 }
 
