@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/url"
 
-	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
 	"github.com/okta/okta-sdk-golang/v2/okta"
 	"github.com/okta/okta-sdk-golang/v2/okta/query"
@@ -17,31 +16,11 @@ import (
 )
 
 const (
-	V1MembershipEntitlementIDTemplate = "membership:%s"
-	V1GrantIDTemplate                 = "grant:%s:%s"
+	V1GrantIDTemplate = "grant:%s:%s"
 )
 
 type responseContext struct {
 	OktaResponse *okta.Response
-}
-
-func V1MembershipEntitlementID(resourceID string) string {
-	return fmt.Sprintf(V1MembershipEntitlementIDTemplate, resourceID)
-}
-
-func fmtGrantIdV1(entitlementID string, userID string) string {
-	return fmt.Sprintf(V1GrantIDTemplate, entitlementID, userID)
-}
-
-func fmtResourceIdV1(id string) string {
-	return id
-}
-
-func fmtResourceId(resourceTypeID string, id string) *v2.ResourceId {
-	return &v2.ResourceId{
-		ResourceType: resourceTypeID,
-		Resource:     id,
-	}
 }
 
 func queryParams(size int, after string) *query.Params {
@@ -109,30 +88,4 @@ func handleOktaResponseError(resp *okta.Response, err error) error {
 		return status.Error(codes.Unavailable, "server error")
 	}
 	return err
-}
-
-// https://developer.okta.com/docs/reference/error-codes/?q=not%20found
-var oktaNotFoundErrors = map[string]struct{}{
-	"E0000007": {},
-	"E0000008": {},
-}
-
-func convertNotFoundError(err error, message string) error {
-	if err == nil {
-		return nil
-	}
-
-	var oktaApiError *okta.Error
-	if !errors.As(err, &oktaApiError) {
-		return err
-	}
-
-	_, ok := oktaNotFoundErrors[oktaApiError.ErrorCode]
-	if !ok {
-		return err
-	}
-
-	grpcErr := status.Error(codes.NotFound, message)
-	allErrs := append([]error{grpcErr}, err)
-	return errors.Join(allErrs...)
 }

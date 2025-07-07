@@ -14,7 +14,6 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
 	"github.com/conductorone/baton-sdk/pkg/uhttp"
-	oktav5 "github.com/conductorone/okta-sdk-golang/v5/okta"
 	"github.com/okta/okta-sdk-golang/v2/okta"
 )
 
@@ -24,30 +23,16 @@ const AccessDeniedErrorCode = "E0000006"
 const ExpectedGroupNameCaptureGroupsWithGroupFilterForMultipleAWSInstances = 3
 
 type Okta struct {
-	client              *okta.Client
-	clientV5            *oktav5.APIClient
-	domain              string
-	apiToken            string
-	syncInactiveApps    bool
-	ciamConfig          *ciamConfig
-	syncCustomRoles     bool
-	skipSecondaryEmails bool
-	awsConfig           *awsConfig
-	SyncSecrets         bool
-	userRoleCache       sync.Map
-}
-
-type ciamConfig struct {
-	Enabled      bool
-	EmailDomains []string
+	client    *okta.Client
+	domain    string
+	apiToken  string
+	awsConfig *awsConfig
 }
 
 type awsConfig struct {
-	Enabled                                               bool
 	OktaAppId                                             string
 	awsAppConfigCacheMutex                                sync.Mutex
 	oktaAWSAppSettings                                    *oktaAWSAppSettings
-	AWSSourceIdentityMode                                 bool
 	AllowGroupToDirectAssignmentConversionForProvisioning bool
 }
 
@@ -85,23 +70,11 @@ type oktaAWSAppSettings struct {
 type Config struct {
 	Domain                                                string
 	ApiToken                                              string
-	OktaClientId                                          string
-	OktaPrivateKey                                        string
-	OktaPrivateKeyId                                      string
-	SyncInactiveApps                                      bool
-	OktaProvisioning                                      bool
-	Ciam                                                  bool
-	CiamEmailDomains                                      []string
 	Cache                                                 bool
 	CacheTTI                                              int32
 	CacheTTL                                              int32
-	SyncCustomRoles                                       bool
-	SkipSecondaryEmails                                   bool
-	AWSMode                                               bool
 	AWSOktaAppId                                          string
-	AWSSourceIdentityMode                                 bool
 	AllowGroupToDirectAssignmentConversionForProvisioning bool
-	SyncSecrets                                           bool
 }
 
 func v1AnnotationsForResourceType(resourceTypeID string, skipEntitlementsAndGrants bool) annotations.Annotations {
@@ -118,18 +91,6 @@ func v1AnnotationsForResourceType(resourceTypeID string, skipEntitlementsAndGran
 }
 
 var (
-	resourceTypeRole = &v2.ResourceType{
-		Id:          "role",
-		DisplayName: "Role",
-		Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_ROLE},
-		Annotations: v1AnnotationsForResourceType("role", false),
-	}
-	resourceTypeCustomRole = &v2.ResourceType{
-		Id:          "custom-role",
-		DisplayName: "Custom Role",
-		Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_ROLE},
-		Annotations: v1AnnotationsForResourceType("custom-role", false),
-	}
 	resourceTypeUser = &v2.ResourceType{
 		Id:          "user",
 		DisplayName: "User",
@@ -142,85 +103,15 @@ var (
 		Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_GROUP},
 		Annotations: v1AnnotationsForResourceType("group", false),
 	}
-	resourceTypeApp = &v2.ResourceType{
-		Id:          "app",
-		DisplayName: "App",
-		Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_APP},
-		Annotations: v1AnnotationsForResourceType("app", false),
-	}
 	resourceTypeAccount = &v2.ResourceType{
 		Id:          "account",
 		DisplayName: "Account",
 		Annotations: v1AnnotationsForResourceType("account", false),
 	}
-	resourceTypeResourceSets = &v2.ResourceType{
-		Id:          "resource-set",
-		DisplayName: "Resource Set",
-		Annotations: v1AnnotationsForResourceType("resource-set", false),
-	}
-	resourceTypeResourceSetsBindings = &v2.ResourceType{
-		Id:          "resourceset-binding",
-		DisplayName: "Resource Set Binding",
-		Annotations: v1AnnotationsForResourceType("resourceset-binding", false),
-	}
-	resourceTypeApiToken = &v2.ResourceType{
-		Id:          "api-token",
-		DisplayName: "API Token",
-		Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_SECRET},
-		Annotations: v1AnnotationsForResourceType("api-token", true),
-	}
-	defaultScopes = []string{
-		"okta.users.read",
-		"okta.groups.read",
-		"okta.roles.read",
-		"okta.apps.read",
-	}
-	provisioningScopes = []string{
-		"okta.users.manage",
-		"okta.groups.manage",
-		"okta.roles.manage",
-		"okta.apps.manage",
-	}
-
-	// TODO (santhosh) Add required scopes for secrets sync
-	// TODO(lauren) use different scopes for aws mode?
 )
 
 func (o *Okta) ResourceSyncers(ctx context.Context) []connectorbuilder.ResourceSyncer {
-	if o.ciamConfig.Enabled {
-		return []connectorbuilder.ResourceSyncer{
-			ciamUserBuilder(o),
-			ciamBuilder(o.client, o.skipSecondaryEmails),
-		}
-	}
-
-	if o.awsConfig.Enabled {
-		resourceSyncer := []connectorbuilder.ResourceSyncer{accountBuilder(o), groupBuilder(o)}
-		if !o.awsConfig.AWSSourceIdentityMode {
-			resourceSyncer = append(resourceSyncer, userBuilder(o))
-		}
-		return resourceSyncer
-	}
-
-	resourceSyncer := []connectorbuilder.ResourceSyncer{
-		roleBuilder(o.client, o),
-		userBuilder(o),
-		groupBuilder(o),
-		appBuilder(o.domain, o.apiToken, o.syncInactiveApps, o.client),
-	}
-
-	if o.syncCustomRoles {
-		resourceSyncer = append(resourceSyncer,
-			customRoleBuilder(o),
-			resourceSetsBuilder(o.domain, o.client, o.clientV5),
-			resourceSetsBindingsBuilder(o.domain, o.client, o.clientV5),
-		)
-	}
-
-	if o.SyncSecrets {
-		resourceSyncer = append(resourceSyncer, apiTokenBuilder(o.clientV5))
-	}
-
+	resourceSyncer := []connectorbuilder.ResourceSyncer{accountBuilder(o), groupBuilder(o)}
 	return resourceSyncer
 }
 
@@ -228,19 +119,7 @@ func (c *Okta) ListResourceTypes(ctx context.Context, request *v2.ResourceTypesS
 	resourceTypes := []*v2.ResourceType{
 		resourceTypeUser,
 		resourceTypeGroup,
-	}
-	if c.awsConfig != nil && c.awsConfig.Enabled {
-		resourceTypes = append(resourceTypes, resourceTypeAccount)
-	} else {
-		resourceTypes = append(resourceTypes, resourceTypeRole, resourceTypeApp)
-	}
-
-	if c.syncCustomRoles {
-		resourceTypes = append(resourceTypes, resourceTypeCustomRole, resourceTypeResourceSets, resourceTypeResourceSetsBindings)
-	}
-
-	if c.SyncSecrets {
-		resourceTypes = append(resourceTypes, resourceTypeApiToken)
+		resourceTypeAccount,
 	}
 
 	return &v2.ResourceTypesServiceListResourceTypesResponse{
@@ -342,11 +221,9 @@ func (c *Okta) Validate(ctx context.Context) (annotations.Annotations, error) {
 		return nil, err
 	}
 
-	if c.awsConfig != nil && c.awsConfig.Enabled {
-		_, err = c.getAWSApplicationConfig(ctx)
-		if err != nil {
-			return nil, err
-		}
+	_, err = c.getAWSApplicationConfig(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	return nil, nil
@@ -359,14 +236,11 @@ func (c *Okta) Asset(ctx context.Context, asset *v2.AssetRef) (string, io.ReadCl
 func New(ctx context.Context, cfg *Config) (*Okta, error) {
 	var (
 		oktaClient *okta.Client
-		scopes     = defaultScopes
 	)
 	client, err := uhttp.NewClient(ctx, uhttp.WithLogger(true, nil))
 	if err != nil {
 		return nil, err
 	}
-
-	var oktaClientV5 *oktav5.APIClient
 
 	if cfg.ApiToken != "" && cfg.Domain != "" {
 		_, oktaClient, err = okta.NewClient(ctx,
@@ -380,82 +254,17 @@ func New(ctx context.Context, cfg *Config) (*Okta, error) {
 		if err != nil {
 			return nil, err
 		}
-
-		config, err := oktav5.NewConfiguration(
-			oktav5.WithOrgUrl(fmt.Sprintf("https://%s", cfg.Domain)),
-			oktav5.WithToken(cfg.ApiToken),
-			oktav5.WithHttpClientPtr(client),
-			oktav5.WithCache(cfg.Cache),
-			oktav5.WithCacheTti(cfg.CacheTTI),
-			oktav5.WithCacheTtl(cfg.CacheTTL),
-		)
-		if err != nil {
-			return nil, err
-		}
-		oktaClientV5 = oktav5.NewAPIClient(config)
-	}
-
-	if cfg.OktaClientId != "" && cfg.OktaPrivateKey != "" && cfg.Domain != "" {
-		if cfg.OktaProvisioning {
-			scopes = append(scopes, provisioningScopes...)
-		}
-
-		if cfg.SyncSecrets {
-			defaultScopes = append(defaultScopes, "okta.apiTokens.read")
-		}
-
-		_, oktaClient, err = okta.NewClient(ctx,
-			okta.WithOrgUrl(fmt.Sprintf("https://%s", cfg.Domain)),
-			okta.WithAuthorizationMode("PrivateKey"),
-			okta.WithClientId(cfg.OktaClientId),
-			okta.WithScopes(scopes),
-			okta.WithPrivateKey(cfg.OktaPrivateKey),
-			okta.WithPrivateKeyId(cfg.OktaPrivateKeyId),
-			okta.WithCache(cfg.Cache),
-			okta.WithCacheTti(cfg.CacheTTI),
-			okta.WithCacheTtl(cfg.CacheTTL),
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		config, err := oktav5.NewConfiguration(
-			oktav5.WithOrgUrl(fmt.Sprintf("https://%s", cfg.Domain)),
-			oktav5.WithAuthorizationMode("PrivateKey"),
-			oktav5.WithClientId(cfg.OktaClientId),
-			oktav5.WithScopes(scopes),
-			oktav5.WithPrivateKey(cfg.OktaPrivateKey),
-			oktav5.WithPrivateKeyId(cfg.OktaPrivateKeyId),
-			oktav5.WithCache(cfg.Cache),
-			oktav5.WithCacheTti(cfg.CacheTTI),
-			oktav5.WithCacheTtl(cfg.CacheTTL),
-		)
-		if err != nil {
-			return nil, err
-		}
-		oktaClientV5 = oktav5.NewAPIClient(config)
 	}
 
 	awsConfig := &awsConfig{
-		Enabled:               cfg.AWSMode,
-		OktaAppId:             cfg.AWSOktaAppId,
-		AWSSourceIdentityMode: cfg.AWSSourceIdentityMode,
+		OktaAppId: cfg.AWSOktaAppId,
 		AllowGroupToDirectAssignmentConversionForProvisioning: cfg.AllowGroupToDirectAssignmentConversionForProvisioning,
 	}
 
 	return &Okta{
-		client:              oktaClient,
-		clientV5:            oktaClientV5,
-		domain:              cfg.Domain,
-		apiToken:            cfg.ApiToken,
-		syncInactiveApps:    cfg.SyncInactiveApps,
-		syncCustomRoles:     cfg.SyncCustomRoles,
-		skipSecondaryEmails: cfg.SkipSecondaryEmails,
-		SyncSecrets:         cfg.SyncSecrets,
-		ciamConfig: &ciamConfig{
-			Enabled:      cfg.Ciam,
-			EmailDomains: cfg.CiamEmailDomains,
-		},
+		client:    oktaClient,
+		domain:    cfg.Domain,
+		apiToken:  cfg.ApiToken,
 		awsConfig: awsConfig,
 	}, nil
 }
