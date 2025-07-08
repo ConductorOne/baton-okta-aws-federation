@@ -1,0 +1,129 @@
+{
+  "fields": [
+    {
+      "name": "api-token",
+      "displayName": "API token",
+      "description": "The API token for the service account",
+      "placeholder": "Your Okta API token",
+      "isRequired": true,
+      "isSecret": true,
+      "stringField": {
+        "rules": {
+          "isRequired": true
+        }
+      }
+    },
+    {
+      "name": "aws-allow-group-to-direct-assignment-conversion-for-provisioning",
+      "displayName": "Allow group to direct assignment conversion for provisioning",
+      "description": "Whether to allow group to direct assignment conversion when provisioning",
+      "boolField": {}
+    },
+    {
+      "name": "aws-okta-app-id",
+      "displayName": "AWS Okta App ID",
+      "description": "The Okta app id for the AWS application",
+      "isRequired": true,
+      "stringField": {
+        "rules": {
+          "isRequired": true
+        }
+      }
+    },
+    {
+      "name": "aws-source-identity-mode",
+      "displayName": "AWS source identity mode",
+      "description": "Enable AWS source identity mode. When set, user and group identities are loaded from the source connector .c1z file",
+      "boolField": {
+        "defaultValue": true
+      }
+    },
+    {
+      "name": "cache",
+      "description": "Enable response cache",
+      "boolField": {
+        "defaultValue": true
+      }
+    },
+    {
+      "name": "cache-tti",
+      "description": "Response cache cleanup interval in seconds",
+      "intField": {
+        "defaultValue": "60"
+      }
+    },
+    {
+      "name": "cache-ttl",
+      "description": "Response cache time to live in seconds",
+      "intField": {
+        "defaultValue": "300"
+      }
+    },
+    {
+      "name": "domain",
+      "displayName": "Okta domain",
+      "description": "The URL for the Okta organization",
+      "placeholder": "e.g. acmeco.okta.com",
+      "isRequired": true,
+      "stringField": {
+        "rules": {
+          "isRequired": true
+        }
+      }
+    },
+    {
+      "name": "log-level",
+      "description": "The log level: debug, info, warn, error",
+      "isOps": true,
+      "stringField": {
+        "defaultValue": "info"
+      }
+    },
+    {
+      "name": "otel-collector-endpoint",
+      "description": "The endpoint of the OpenTelemetry collector to send observability data to (used for both tracing and logging if specific endpoints are not provided)",
+      "isOps": true,
+      "stringField": {}
+    },
+    {
+      "name": "otel-collector-endpoint-tls-cert",
+      "description": "A PEM-encoded certificate to use as a CA for TLS connections to the OpenTelemetry collector",
+      "isOps": true,
+      "stringField": {}
+    },
+    {
+      "name": "otel-collector-endpoint-tls-cert-path",
+      "description": "Path to a file containing a PEM-encoded certificate to use as a CA for TLS connections to the OpenTelemetry collector",
+      "isOps": true,
+      "stringField": {}
+    },
+    {
+      "name": "otel-collector-endpoint-tls-insecure",
+      "description": "Allow insecure connections to the OpenTelemetry collector",
+      "isOps": true,
+      "boolField": {}
+    },
+    {
+      "name": "otel-logging-disabled",
+      "description": "Disable OpenTelemetry logging",
+      "isOps": true,
+      "boolField": {}
+    },
+    {
+      "name": "otel-tracing-disabled",
+      "description": "Disable OpenTelemetry tracing",
+      "isOps": true,
+      "boolField": {}
+    },
+    {
+      "name": "skip-secondary-emails",
+      "description": "Skip syncing secondary emails",
+      "boolField": {}
+    }
+  ],
+  "displayName": "Okta AWS Federation",
+  "iconUrl": "/static/app-icons/okta.svg",
+  "isDirectory": true,
+  "supportsExternalResources": true,
+  "requiresExternalConnector": true
+}
