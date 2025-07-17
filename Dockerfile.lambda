@@ -1,0 +1,3 @@
+FROM public.ecr.aws/lambda/provided:al2023
+ENTRYPOINT ["/baton-okta-aws-federation", "lambda"]
+COPY baton-okta-aws-federation /
