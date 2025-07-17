@@ -26,12 +26,6 @@ var (
 		field.WithDefaultValue(false),
 	)
 
-	awsSourceIdentityMode = field.BoolField("aws-source-identity-mode",
-		field.WithDisplayName("AWS source identity mode"),
-		field.WithDescription("Enable AWS source identity mode. When set, user and group identities are loaded from the source connector .c1z file"),
-		field.WithDefaultValue(true),
-	)
-
 	awsOktaAppId = field.StringField("aws-okta-app-id",
 		field.WithDisplayName("AWS Okta App ID"),
 		field.WithDescription("The Okta app id for the AWS application"),
@@ -53,7 +47,6 @@ var Config = field.NewConfiguration([]field.SchemaField{
 	cacheTTL,
 	skipSecondaryEmails,
 	awsOktaAppId,
-	awsSourceIdentityMode,
 	awsAllowGroupToDirectAssignmentConversionForProvisioning,
 },
 	field.WithConnectorDisplayName("Okta AWS Federation"),
