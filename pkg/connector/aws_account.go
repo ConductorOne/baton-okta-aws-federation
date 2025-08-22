@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -18,6 +19,7 @@ import (
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"github.com/okta/okta-sdk-golang/v2/okta"
+	"github.com/okta/okta-sdk-golang/v2/okta/query"
 	"go.uber.org/zap"
 )
 
@@ -891,4 +893,61 @@ func removeSamlRole(samlRoles []string, samlRoleToRemove string) []string {
 		newSamlRoles = append(newSamlRoles, samlRole)
 	}
 	return newSamlRoles
+}
+
+func listGroupsHelper(ctx context.Context, client *okta.Client, token *pagination.Token, qp *query.Params) ([]*okta.Group, *responseContext, error) {
+	groups, resp, err := client.Group.ListGroups(ctx, qp)
+	if err != nil {
+		return nil, nil, fmt.Errorf("okta-connectorv2: failed to fetch groups from okta: %w", handleOktaResponseError(resp, err))
+	}
+	reqCtx, err := responseToContext(token, resp)
+	if err != nil {
+		return nil, nil, err
+	}
+	return groups, reqCtx, nil
+}
+
+func listUsersGroupsClient(ctx context.Context, client *okta.Client, userId string) ([]*okta.Group, *responseContext, error) {
+	users, resp, err := client.User.ListUserGroups(ctx, userId)
+	if err != nil {
+		return nil, nil, fmt.Errorf("okta-connectorv2: failed to fetch group users from okta: %w", handleOktaResponseError(resp, err))
+	}
+
+	reqCtx, err := responseToContext(&pagination.Token{}, resp)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return users, reqCtx, nil
+}
+
+/*
+This filter field uses a regular expression to filter AWS-related groups and extract the accountid and role.
+
+If you use the default AWS role group syntax (aws#[account alias]#[role name]#[account #]), then you can use this Regex string:
+^aws\#\S+\#(?{{role}}[\w\-]+)\#(?{{accountid}}\d+)$
+
+This Regex expression logically equates to:
+find groups that start with AWS, then #, then a string of text, then #, then the AWS role, then #, then the AWS account ID.
+
+You can also use this Regex expression:
+aws_(?{{accountid}}\d+)_(?{{role}}[a-zA-Z0-9+=,.@\-_]+)
+If you don't use a default Regex expression, create on that properly filters your AWS role groups.
+The expression should capture the AWS role name and account ID within two distinct Regex groups named {{role}} and {{accountid}}.
+*/
+func parseAccountIDAndRoleFromGroupName(ctx context.Context, roleRegex string, groupName string) (string, string, bool, error) {
+	// TODO(lauren) move to get app config
+	re, err := regexp.Compile(roleRegex)
+	if err != nil {
+		return "", "", false, fmt.Errorf("error compiling regex '%s': %w", roleRegex, err)
+	}
+	match := re.FindStringSubmatch(groupName)
+	if len(match) != ExpectedGroupNameCaptureGroupsWithGroupFilterForMultipleAWSInstances {
+		return "", "", false, nil
+	}
+	// First element is full string
+	accountId := match[1]
+	role := match[2]
+
+	return accountId, role, true, nil
 }

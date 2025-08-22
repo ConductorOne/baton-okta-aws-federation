@@ -15,9 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const (
-	V1GrantIDTemplate = "grant:%s:%s"
-)
+const ContentType = "application/json"
 
 type responseContext struct {
 	OktaResponse *okta.Response

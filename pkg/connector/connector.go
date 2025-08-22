@@ -111,7 +111,7 @@ var (
 )
 
 func (o *Okta) ResourceSyncers(ctx context.Context) []connectorbuilder.ResourceSyncer {
-	resourceSyncer := []connectorbuilder.ResourceSyncer{accountBuilder(o), groupBuilder(o)}
+	resourceSyncer := []connectorbuilder.ResourceSyncer{accountBuilder(o)}
 	return resourceSyncer
 }
 
@@ -453,4 +453,18 @@ func accountIdFromARN(input string) (string, error) {
 		return "", fmt.Errorf("okta-aws-connector: invalid ARN: '%s': %w", input, err)
 	}
 	return parsedArn.AccountID, nil
+}
+
+func getOrgSettings(ctx context.Context, client *okta.Client, token *pagination.Token) (*okta.OrgSetting, *responseContext, error) {
+	orgSettings, resp, err := client.OrgSetting.GetOrgSettings(ctx)
+	if err != nil {
+		return nil, nil, handleOktaResponseError(resp, err)
+	}
+
+	respCtx, err := responseToContext(token, resp)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return orgSettings, respCtx, nil
 }
