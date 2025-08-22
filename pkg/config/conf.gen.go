@@ -11,7 +11,6 @@ type OktaAwsFederation struct {
 	CacheTtl int `mapstructure:"cache-ttl"`
 	SkipSecondaryEmails bool `mapstructure:"skip-secondary-emails"`
 	AwsOktaAppId string `mapstructure:"aws-okta-app-id"`
-	AwsSourceIdentityMode bool `mapstructure:"aws-source-identity-mode"`
 	AwsAllowGroupToDirectAssignmentConversionForProvisioning bool `mapstructure:"aws-allow-group-to-direct-assignment-conversion-for-provisioning"`
 }
 
