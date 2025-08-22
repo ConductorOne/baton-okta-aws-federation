@@ -9,7 +9,6 @@ type OktaAwsFederation struct {
 	Cache bool `mapstructure:"cache"`
 	CacheTti int `mapstructure:"cache-tti"`
 	CacheTtl int `mapstructure:"cache-ttl"`
-	SkipSecondaryEmails bool `mapstructure:"skip-secondary-emails"`
 	AwsOktaAppId string `mapstructure:"aws-okta-app-id"`
 	AwsAllowGroupToDirectAssignmentConversionForProvisioning bool `mapstructure:"aws-allow-group-to-direct-assignment-conversion-for-provisioning"`
 }

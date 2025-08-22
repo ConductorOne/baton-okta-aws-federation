@@ -32,10 +32,9 @@ var (
 		field.WithRequired(true),
 	)
 
-	cache               = field.BoolField("cache", field.WithDescription("Enable response cache"), field.WithDefaultValue(true))
-	cacheTTI            = field.IntField("cache-tti", field.WithDescription("Response cache cleanup interval in seconds"), field.WithDefaultValue(60))
-	cacheTTL            = field.IntField("cache-ttl", field.WithDescription("Response cache time to live in seconds"), field.WithDefaultValue(300))
-	skipSecondaryEmails = field.BoolField("skip-secondary-emails", field.WithDescription("Skip syncing secondary emails"), field.WithDefaultValue(false))
+	cache    = field.BoolField("cache", field.WithDescription("Enable response cache"), field.WithDefaultValue(true))
+	cacheTTI = field.IntField("cache-tti", field.WithDescription("Response cache cleanup interval in seconds"), field.WithDefaultValue(60))
+	cacheTTL = field.IntField("cache-ttl", field.WithDescription("Response cache time to live in seconds"), field.WithDefaultValue(300))
 )
 
 //go:generate go run ./gen
@@ -45,7 +44,6 @@ var Config = field.NewConfiguration([]field.SchemaField{
 	cache,
 	cacheTTI,
 	cacheTTL,
-	skipSecondaryEmails,
 	awsOktaAppId,
 	awsAllowGroupToDirectAssignmentConversionForProvisioning,
 },
