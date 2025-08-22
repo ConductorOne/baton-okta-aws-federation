@@ -31,14 +31,6 @@
       }
     },
     {
-      "name": "aws-source-identity-mode",
-      "displayName": "AWS source identity mode",
-      "description": "Enable AWS source identity mode. When set, user and group identities are loaded from the source connector .c1z file",
-      "boolField": {
-        "defaultValue": true
-      }
-    },
-    {
       "name": "cache",
       "description": "Enable response cache",
       "boolField": {
@@ -113,11 +105,6 @@
       "name": "otel-tracing-disabled",
       "description": "Disable OpenTelemetry tracing",
       "isOps": true,
-      "boolField": {}
-    },
-    {
-      "name": "skip-secondary-emails",
-      "description": "Skip syncing secondary emails",
       "boolField": {}
     }
   ],
