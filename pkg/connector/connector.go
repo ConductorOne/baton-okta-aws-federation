@@ -318,11 +318,11 @@ func (c *Okta) getAWSApplicationConfig(ctx context.Context, ss sessions.SessionS
 		return nil, fmt.Errorf("okta-connector: no app id set")
 	}
 
-	app, awsAppResp, err := c.client.Application.GetApplication(ctx, c.awsConfig.OktaAppId, okta.NewApplication(), nil)
+	app, resp, err := c.clientV5.ApplicationAPI.GetApplication(ctx, c.awsConfig.OktaAppId).Execute()
 	if err != nil {
 		return nil, fmt.Errorf("okta-aws-connector: verify failed to fetch aws app: %w", err)
 	}
-	awsAppRespCtx, err := responseToContext(&pagination.Token{}, awsAppResp)
+	awsAppRespCtx, err := responseToContextV5(&pagination.Token{}, resp)
 	if err != nil {
 		return nil, fmt.Errorf("okta-aws-connector: verify failed to convert get aws app response: %w", err)
 	}
@@ -330,12 +330,17 @@ func (c *Okta) getAWSApplicationConfig(ctx context.Context, ss sessions.SessionS
 		err := fmt.Errorf("okta-connector: verify returned non-200 for aws app: '%d'", awsAppRespCtx.OktaResponse.StatusCode)
 		return nil, err
 	}
-	oktaApp, err := oktaAppToOktaApplication(ctx, app)
-	if err != nil {
-		return nil, fmt.Errorf("okta-connector: verify failed to convert aws app: %w", err)
+
+	appInstance := app.GetActualInstance()
+	oktaApp, ok := appInstance.(*oktav5.SamlApplication)
+	if !ok {
+		if appInstance == nil {
+			return nil, fmt.Errorf("okta-aws-connector: error getting actual instance of okta app")
+		}
+		return nil, fmt.Errorf("okta-aws-connector: error getting actual instance of okta app: unexpected type %T", appInstance)
 	}
-	if !strings.Contains(oktaApp.Name, "aws") {
-		return nil, fmt.Errorf("okta-aws-connector: okta app '%s' is not an aws app", oktaApp.Name)
+	if !strings.Contains(*oktaApp.Name, "aws") {
+		return nil, fmt.Errorf("okta-aws-connector: okta app '%s' is not an aws app", *oktaApp.Name)
 	}
 	if oktaApp.Settings == nil {
 		return nil, fmt.Errorf("okta-aws-connector: settings are not present on okta app")
@@ -344,7 +349,7 @@ func (c *Okta) getAWSApplicationConfig(ctx context.Context, ss sessions.SessionS
 		return nil, fmt.Errorf("okta-aws-connector: app settings are not present on okta app")
 	}
 	appSettings := *oktaApp.Settings.App
-	useGroupMapping, ok := appSettings["useGroupMapping"]
+	useGroupMapping, ok := appSettings.AdditionalProperties["useGroupMapping"]
 	if !ok {
 		return nil, fmt.Errorf("okta-connector: 'useGroupMapping' app setting is not present on okta app settings")
 	}
@@ -352,7 +357,7 @@ func (c *Okta) getAWSApplicationConfig(ctx context.Context, ss sessions.SessionS
 	if !ok {
 		return nil, fmt.Errorf("okta-connector: 'useGroupMapping' app setting is not boolean")
 	}
-	groupFilter, ok := appSettings["groupFilter"]
+	groupFilter, ok := appSettings.AdditionalProperties["groupFilter"]
 	if !ok {
 		return nil, fmt.Errorf("okta-connector: 'groupFilter' app setting is not present on okta app settings")
 	}
@@ -360,7 +365,7 @@ func (c *Okta) getAWSApplicationConfig(ctx context.Context, ss sessions.SessionS
 	if !ok {
 		return nil, fmt.Errorf("okta-connector: 'groupFilter' app setting is not string")
 	}
-	joinAllRoles, ok := appSettings["joinAllRoles"]
+	joinAllRoles, ok := appSettings.AdditionalProperties["joinAllRoles"]
 	if !ok {
 		return nil, fmt.Errorf("okta-connector: 'joinAllRoles' app setting is not present on okta app settings")
 	}
@@ -368,7 +373,7 @@ func (c *Okta) getAWSApplicationConfig(ctx context.Context, ss sessions.SessionS
 	if !ok {
 		return nil, fmt.Errorf("okta-connector: 'joinAllRoles' app setting is not boolean")
 	}
-	identityProviderArn, ok := appSettings["identityProviderArn"]
+	identityProviderArn, ok := appSettings.AdditionalProperties["identityProviderArn"]
 	if !ok {
 		return nil, fmt.Errorf("okta-connector: 'identityProviderArn' app setting is not present on okta app settings")
 	}

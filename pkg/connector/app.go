@@ -2,7 +2,6 @@ package connector
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/conductorone/baton-sdk/pkg/pagination"
@@ -36,17 +35,4 @@ func listApplicationUsers(ctx context.Context, client *okta.Client, appID string
 	}
 
 	return applicationUsers, reqCtx, nil
-}
-
-func oktaAppToOktaApplication(ctx context.Context, app okta.App) (*okta.Application, error) {
-	var oktaApp okta.Application
-	b, err := json.Marshal(app)
-	if err != nil {
-		return nil, fmt.Errorf("okta-connectorv2: error marshalling okta app: %w", err)
-	}
-	err = json.Unmarshal(b, &oktaApp)
-	if err != nil {
-		return nil, fmt.Errorf("okta-connectorv2: error unmarshalling okta app: %w", err)
-	}
-	return &oktaApp, nil
 }
