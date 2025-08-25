@@ -208,12 +208,12 @@ func (c *Okta) Validate(ctx context.Context) (annotations.Annotations, error) {
 
 	token := newPaginationToken(defaultLimit, "")
 
-	_, respCtx, err := getOrgSettings(ctx, c.client, token)
+	_, respCtx, err := getOrgSettings(ctx, c.clientV5, token)
 	if err != nil {
 		return nil, fmt.Errorf("okta-connector: verify failed to fetch org: %w", err)
 	}
 
-	_, _, err = parseResp(respCtx.OktaResponse)
+	_, _, err = parseRespV5(respCtx.OktaResponse)
 	if err != nil {
 		return nil, fmt.Errorf("okta-connector: verify failed to parse response: %w", err)
 	}
@@ -473,13 +473,14 @@ func accountIdFromARN(input string) (string, error) {
 	return parsedArn.AccountID, nil
 }
 
-func getOrgSettings(ctx context.Context, client *okta.Client, token *pagination.Token) (*okta.OrgSetting, *responseContext, error) {
-	orgSettings, resp, err := client.OrgSetting.GetOrgSettings(ctx)
+// TODO: cleanup pagination token
+func getOrgSettings(ctx context.Context, client *oktav5.APIClient, token *pagination.Token) (*oktav5.OrgSetting, *responseContextV5, error) {
+	orgSettings, resp, err := client.OrgSettingAPI.GetOrgSettings(ctx).Execute()
 	if err != nil {
-		return nil, nil, handleOktaResponseError(resp, err)
+		return nil, nil, handleOktaResponseErrorV5(resp, err)
 	}
 
-	respCtx, err := responseToContext(token, resp)
+	respCtx, err := responseToContextV5(token, resp)
 	if err != nil {
 		return nil, nil, err
 	}
