@@ -8,6 +8,7 @@ import (
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
+	oktav5 "github.com/conductorone/okta-sdk-golang/v5/okta"
 	"github.com/okta/okta-sdk-golang/v2/okta"
 )
 
@@ -29,6 +30,26 @@ func parseResp(resp *okta.Response) (string, annotations.Annotations, error) {
 
 	if resp != nil {
 		u, err := url.Parse(resp.NextPage)
+		if err != nil {
+			return "", nil, err
+		}
+		after := u.Query().Get("after")
+
+		if desc, err := ratelimit.ExtractRateLimitData(resp.StatusCode, &resp.Header); err == nil {
+			annos.WithRateLimiting(desc)
+		}
+		nextPage = after
+	}
+
+	return nextPage, annos, nil
+}
+
+func parseRespV5(resp *oktav5.APIResponse) (string, annotations.Annotations, error) {
+	var annos annotations.Annotations
+	var nextPage string
+
+	if resp != nil {
+		u, err := url.Parse(resp.NextPage())
 		if err != nil {
 			return "", nil, err
 		}
