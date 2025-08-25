@@ -377,7 +377,7 @@ func (c *Okta) getAWSApplicationConfig(ctx context.Context) (*oktaAWSAppSettings
 		return nil, err
 	}
 
-	samlRolesUnionEnabled, err := isSamlRolesUnionEnabled(ctx, c.client, c.awsConfig.OktaAppId)
+	samlRolesUnionEnabled, err := isSamlRolesUnionEnabled(ctx, c.clientV5, c.awsConfig.OktaAppId)
 	if err != nil {
 		return nil, err
 	}
@@ -406,34 +406,42 @@ type AppUserSchema struct {
 	} `json:"definitions"`
 }
 
-func getDefaultAppUserSchema(ctx context.Context, client *okta.Client, appId string) (*AppUserSchema, error) {
-	url := fmt.Sprintf(apiPathDefaultAppSchema, appId)
-	rq := client.CloneRequestExecutor()
-	req, err := rq.
-		WithAccept(ContentType).
-		WithContentType(ContentType).
-		NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	var appUserSchema *AppUserSchema
-	_, err = rq.Do(ctx, req, &appUserSchema)
+func getDefaultAppUserSchema(ctx context.Context, client *oktav5.APIClient, appId string) (*oktav5.UserSchema, error) {
+	schema, _, err := client.SchemaAPI.GetApplicationUserSchema(ctx, appId).Execute()
 	if err != nil {
 		return nil, fmt.Errorf("okta-aws-connector: error fetching default application schema: %w", err)
 	}
-	return appUserSchema, nil
+
+	return schema, nil
 }
 
-func isSamlRolesUnionEnabled(ctx context.Context, client *okta.Client, appId string) (bool, error) {
+func isSamlRolesUnionEnabled(ctx context.Context, client *oktav5.APIClient, appId string) (bool, error) {
 	defaultAppSchema, err := getDefaultAppUserSchema(ctx, client, appId)
 	if err != nil {
 		return false, err
 	}
-	if defaultAppSchema.Definitions.Base.Properties.SamlRoles.Union == "ENABLE" {
-		return true, nil
+
+	samlRoles, ok := defaultAppSchema.Definitions.Base.Properties.AdditionalProperties["samlRoles"]
+	if !ok {
+		return false, nil
 	}
-	return false, nil
+
+	samlRolesMap, ok := samlRoles.(map[string]interface{})
+	if !ok {
+		return false, fmt.Errorf("okta-aws-connector: samlRoles is not a map[string]interface{}")
+	}
+
+	unionValue, ok := samlRolesMap["union"]
+	if !ok {
+		return false, nil
+	}
+
+	unionString, ok := unionValue.(string)
+	if !ok {
+		return false, fmt.Errorf("okta-aws-connector: union value is not a string")
+	}
+
+	return unionString == "ENABLE", nil
 }
 
 func (a *oktaAWSAppSettings) getAppGroupFromCache(ctx context.Context, groupId string) (*OktaAppGroupWrapper, error) {
