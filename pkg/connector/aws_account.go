@@ -253,7 +253,7 @@ func (o *accountResourceType) Grants(
 	case resourceTypeGroup.Id:
 		rv, oktaResp, err = o.groupGrants(ctx, resource, token, page)
 	default:
-		rv, oktaResp, err = o.groupGrants(ctx, resource, token, page)
+		return nil, "", nil, fmt.Errorf("okta-aws-connector: invalid resource type: %s", bag.ResourceTypeID())
 	}
 	if err != nil {
 		return nil, "", nil, err
