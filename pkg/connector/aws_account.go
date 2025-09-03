@@ -363,7 +363,9 @@ func (o *accountResourceType) collectRolesFromUserGroups(
 	ss sessions.SessionStore,
 	userID string,
 ) (mapset.Set[string], error) {
-	userGroups, _, err := listUsersGroupsClient(ctx, o.connector.client, userID)
+	l := ctxzap.Extract(ctx)
+
+	userGroups, _, err := listUsersGroupsClientV5(ctx, o.connector.clientV5, userID)
 	if err != nil {
 		return nil, fmt.Errorf("okta-aws-connector: failed to get groups for user '%s': %w", userID, err)
 	}
@@ -371,7 +373,12 @@ func (o *accountResourceType) collectRolesFromUserGroups(
 	roles := mapset.NewSet[string]()
 
 	for _, group := range userGroups {
-		appGroup, err := o.getOktaAppGroupFromCacheOrFetch(ctx, ss, group.Id)
+		if group.Id == nil {
+			l.Warn("okta-aws-connector: user group id was nil", zap.Any("userId", userID), zap.Any("group", group))
+			continue
+		}
+
+		appGroup, err := o.getOktaAppGroupFromCacheOrFetch(ctx, ss, *group.Id)
 		if err != nil {
 			return nil, err
 		}
@@ -1083,6 +1090,22 @@ func listUsersGroupsClient(ctx context.Context, client *okta.Client, userId stri
 	}
 
 	reqCtx, err := responseToContext(&pagination.Token{}, resp)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return users, reqCtx, nil
+}
+
+func listUsersGroupsClientV5(ctx context.Context, client *oktav5.APIClient, userId string) ([]oktav5.Group, *responseContextV5, error) {
+	// TODO(golds): should we paginate or exhaust?
+	users, resp, err := client.UserAPI.ListUserGroups(ctx, userId).
+		Execute()
+	if err != nil {
+		return nil, nil, fmt.Errorf("okta-connectorv2: failed to fetch group users from okta: %w", handleOktaResponseErrorV5(resp, err))
+	}
+
+	reqCtx, err := responseToContextV5(&pagination.Token{}, resp)
 	if err != nil {
 		return nil, nil, err
 	}
