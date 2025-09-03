@@ -80,6 +80,21 @@ func getError(response *okta.Response) (okta.Error, error) {
 	return errOkta, nil
 }
 
+func getErrorV5(response *oktav5.APIResponse) (oktav5.Error, error) {
+	var errOkta oktav5.Error
+	bytes, err := io.ReadAll(response.Body)
+	if err != nil {
+		return oktav5.Error{}, err
+	}
+
+	err = json.Unmarshal(bytes, &errOkta)
+	if err != nil {
+		return oktav5.Error{}, err
+	}
+
+	return errOkta, nil
+}
+
 func handleOktaResponseError(resp *okta.Response, err error) error {
 	var urlErr *url.Error
 	if errors.As(err, &urlErr) {

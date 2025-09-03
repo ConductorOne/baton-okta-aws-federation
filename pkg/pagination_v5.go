@@ -19,7 +19,7 @@ func parseRespV5(resp *oktav5.APIResponse) (string, annotations.Annotations, err
 		return "", nil, nil
 	}
 
-	if desc, err := ratelimit.ExtractRateLimitData(resp.Response.StatusCode, &resp.Response.Header); err == nil {
+	if desc, err := ratelimit.ExtractRateLimitData(resp.StatusCode, &resp.Header); err == nil {
 		annos.WithRateLimiting(desc)
 	}
 
@@ -43,12 +43,12 @@ func serializeOktaResponseV5(resp *oktav5.APIResponse) (string, error) {
 
 	// The request will be nil when the response is cached
 	var url string
-	if resp.Response.Request != nil {
-		url = resp.Response.Request.URL.String()
+	if resp.Request != nil {
+		url = resp.Request.URL.String()
 	}
 
 	serializable := &SerializableOktaResponseV5{
-		Link: resp.Response.Header["Link"],
+		Link: resp.Header["Link"],
 		Url:  url,
 	}
 
