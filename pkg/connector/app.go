@@ -25,7 +25,13 @@ func listApplicationGroupAssignments(ctx context.Context, client *okta.Client, a
 	return applicationGroupAssignments, reqCtx, nil
 }
 
-func listApplicationGroupAssignmentsV5(ctx context.Context, client *oktav5.APIClient, appID string, token *pagination.Token, after string) ([]oktav5.ApplicationGroupAssignment, *responseContextV5, error) {
+func listApplicationGroupAssignmentsV5(
+	ctx context.Context,
+	client *oktav5.APIClient,
+	appID string,
+	token *pagination.Token,
+	after string,
+) ([]oktav5.ApplicationGroupAssignment, *responseContextV5, error) {
 	applicationGroupAssignments, resp, err := client.ApplicationGroupsAPI.ListApplicationGroupAssignments(ctx, appID).
 		After(after).
 		Limit(defaultLimit).
