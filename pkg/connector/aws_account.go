@@ -1023,8 +1023,9 @@ func updateApplicationGroup(
 
 	payload := []JSONPatchOperation{
 		{
-			Op:    "replace",
-			Path:  "/profile/samlRoles",
+			Op:   "replace",
+			Path: "/profile/samlRoles",
+			// oktav5 expects []string, okta v2 expects map[string]interface{} ...
 			Value: samlRoles,
 		},
 	}
