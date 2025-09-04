@@ -787,6 +787,9 @@ func (o *accountResourceType) Grant(ctx context.Context, principal *v2.Resource,
 				AppUser(oktav5.AppUserUpdateRequest{
 					AppUserProfileRequestPayload: &oktav5.AppUserProfileRequestPayload{
 						Profile: appUserProfile,
+						AdditionalProperties: map[string]interface{}{
+							"scope": appUserScope,
+						},
 					},
 				}).
 				Execute()
@@ -956,6 +959,10 @@ func (o *accountResourceType) Revoke(ctx context.Context, grant *v2.Grant) (anno
 			AppUser(oktav5.AppUserUpdateRequest{
 				AppUserProfileRequestPayload: &oktav5.AppUserProfileRequestPayload{
 					Profile: appUserProfile,
+					AdditionalProperties: map[string]interface{}{
+						"samlRoles": newSamlRoles,
+						"scope":     appUserScope,
+					},
 				},
 			}).
 			Execute()
