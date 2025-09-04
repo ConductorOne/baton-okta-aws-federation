@@ -22,7 +22,6 @@ import (
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"github.com/okta/okta-sdk-golang/v2/okta"
-	"github.com/okta/okta-sdk-golang/v2/okta/query"
 	"go.uber.org/zap"
 )
 
@@ -40,8 +39,6 @@ type accountResourceType struct {
 	resourceType *v2.ResourceType
 	connector    *Okta
 }
-
-const apiPathDefaultAppSchema = "/api/v1/meta/schemas/apps/%s/default"
 
 const (
 	appUserScope  = "USER"
@@ -536,20 +533,6 @@ func (o *accountResourceType) listAWSSamlRoles(ctx context.Context) (*AWSRoles, 
 	return awsRoles, respCtx, nil
 }
 
-func getSAMLRolesFromAppUserProfile(ctx context.Context, appUser *okta.AppUser) ([]string, error) {
-	l := ctxzap.Extract(ctx)
-	if appUser.Profile == nil {
-		l.Error("app user profile was nil", zap.Any("userId", appUser.Id))
-		return nil, nil
-	}
-	appUserProfile, ok := appUser.Profile.(map[string]interface{})
-	if !ok {
-		l.Error("error casting app user profile", zap.Any("userId", appUser.Id))
-		return nil, nil
-	}
-	return getSAMLRoles(appUserProfile)
-}
-
 func getSAMLRolesFromAppUserProfileV5(ctx context.Context, appUser oktav5.AppUser) ([]string, error) {
 	l := ctxzap.Extract(ctx)
 	if appUser.Profile == nil {
@@ -559,20 +542,6 @@ func getSAMLRolesFromAppUserProfileV5(ctx context.Context, appUser oktav5.AppUse
 	return getSAMLRoles(appUser.Profile)
 }
 
-func getOrCreateAppUserProfile(ctx context.Context, appUser *okta.AppUser) map[string]any {
-	l := ctxzap.Extract(ctx)
-	if appUser.Profile == nil {
-		l.Error("app user profile was nil", zap.Any("userId", appUser.Id))
-		return make(map[string]any)
-	}
-	appUserProfile, ok := appUser.Profile.(map[string]any)
-	if !ok {
-		l.Error("error casting app user profile", zap.Any("userId", appUser.Id))
-		return make(map[string]any)
-	}
-	return appUserProfile
-}
-
 func getOrCreateAppUserProfileV5(ctx context.Context, appUser *oktav5.AppUser) map[string]any {
 	l := ctxzap.Extract(ctx)
 	if appUser.Profile == nil {
@@ -580,20 +549,6 @@ func getOrCreateAppUserProfileV5(ctx context.Context, appUser *oktav5.AppUser) m
 		return make(map[string]any)
 	}
 	return appUser.Profile
-}
-
-func getSAMLRolesFromAppGroupProfile(ctx context.Context, appGroup *okta.ApplicationGroupAssignment) ([]string, error) {
-	l := ctxzap.Extract(ctx)
-	if appGroup.Profile == nil {
-		l.Error("app group profile was nil", zap.Any("groupId", appGroup.Id))
-		return nil, nil
-	}
-	appGroupProfile, ok := appGroup.Profile.(map[string]interface{})
-	if !ok {
-		l.Error("error casting app user profile", zap.Any("groupId", appGroup.Id))
-		return nil, nil
-	}
-	return getSAMLRoles(appGroupProfile)
 }
 
 func getSAMLRolesFromAppGroupProfileV5(ctx context.Context, appGroup oktav5.ApplicationGroupAssignment) ([]string, error) {
@@ -1063,18 +1018,6 @@ func removeSamlRole(samlRoles []string, samlRoleToRemove string) []string {
 	return newSamlRoles
 }
 
-func listGroupsHelper(ctx context.Context, client *okta.Client, token *pagination.Token, qp *query.Params) ([]*okta.Group, *responseContext, error) {
-	groups, resp, err := client.Group.ListGroups(ctx, qp)
-	if err != nil {
-		return nil, nil, fmt.Errorf("okta-connectorv2: failed to fetch groups from okta: %w", handleOktaResponseError(resp, err))
-	}
-	reqCtx, err := responseToContext(token, resp)
-	if err != nil {
-		return nil, nil, err
-	}
-	return groups, reqCtx, nil
-}
-
 func listGroupsHelperV5(ctx context.Context, client *oktav5.APIClient, token *pagination.Token, after string) ([]oktav5.Group, *responseContextV5, error) {
 	groups, resp, err := client.GroupAPI.ListGroups(ctx).
 		Limit(defaultLimit).
@@ -1089,20 +1032,6 @@ func listGroupsHelperV5(ctx context.Context, client *oktav5.APIClient, token *pa
 		return nil, nil, err
 	}
 	return groups, reqCtx, nil
-}
-
-func listUsersGroupsClient(ctx context.Context, client *okta.Client, userId string) ([]*okta.Group, *responseContext, error) {
-	users, resp, err := client.User.ListUserGroups(ctx, userId)
-	if err != nil {
-		return nil, nil, fmt.Errorf("okta-connectorv2: failed to fetch group users from okta: %w", handleOktaResponseError(resp, err))
-	}
-
-	reqCtx, err := responseToContext(&pagination.Token{}, resp)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return users, reqCtx, nil
 }
 
 func listUsersGroupsClientV5(ctx context.Context, client *oktav5.APIClient, userId string) ([]oktav5.Group, *responseContextV5, error) {

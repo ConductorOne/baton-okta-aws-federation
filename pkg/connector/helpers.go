@@ -11,7 +11,6 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/pagination"
 	oktav5 "github.com/conductorone/okta-sdk-golang/v5/okta"
 	"github.com/okta/okta-sdk-golang/v2/okta"
-	"github.com/okta/okta-sdk-golang/v2/okta/query"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -24,17 +23,6 @@ type responseContext struct {
 
 type responseContextV5 struct {
 	OktaResponse *oktav5.APIResponse
-}
-
-func queryParams(size int, after string) *query.Params {
-	if size == 0 || size > defaultLimit {
-		size = defaultLimit
-	}
-	if after == "" {
-		return query.NewQueryParams(query.WithLimit(int64(size)))
-	}
-
-	return query.NewQueryParams(query.WithLimit(int64(size)), query.WithAfter(after))
 }
 
 func responseToContext(token *pagination.Token, resp *okta.Response) (*responseContext, error) {
@@ -93,22 +81,6 @@ func getErrorV5(response *oktav5.APIResponse) (oktav5.Error, error) {
 	}
 
 	return errOkta, nil
-}
-
-func handleOktaResponseError(resp *okta.Response, err error) error {
-	var urlErr *url.Error
-	if errors.As(err, &urlErr) {
-		if urlErr.Timeout() {
-			return status.Error(codes.DeadlineExceeded, fmt.Sprintf("request timeout: %v", urlErr.URL))
-		}
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return status.Error(codes.DeadlineExceeded, "request timeout")
-	}
-	if resp != nil && resp.StatusCode >= 500 {
-		return status.Error(codes.Unavailable, "server error")
-	}
-	return err
 }
 
 func handleOktaResponseErrorV5(resp *oktav5.APIResponse, err error) error {

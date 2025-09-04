@@ -498,16 +498,6 @@ func (a *oktaAWSAppSettings) setNotAppGroupInCache(ctx context.Context, ss sessi
 	return session.SetJSON(ctx, ss, groupId, value, notAppGroupPrefix)
 }
 
-func appGroupSAMLRolesWrapper(ctx context.Context, appGroup *okta.ApplicationGroupAssignment) (*OktaAppGroupWrapper, error) {
-	samlRoles, err := getSAMLRolesFromAppGroupProfile(ctx, appGroup)
-	if err != nil {
-		return nil, err
-	}
-	return &OktaAppGroupWrapper{
-		samlRoles: samlRoles,
-	}, nil
-}
-
 func appGroupSAMLRolesWrapperV5(ctx context.Context, appGroup oktav5.ApplicationGroupAssignment) (*OktaAppGroupWrapper, error) {
 	samlRoles, err := getSAMLRolesFromAppGroupProfileV5(ctx, appGroup)
 	if err != nil {
