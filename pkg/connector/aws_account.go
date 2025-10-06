@@ -637,7 +637,9 @@ func (o *accountResourceType) Grant(ctx context.Context, principal *v2.Resource,
 		}
 
 		if appUser != nil {
-			if appUser.Scope == appGroupScope && !o.connector.awsConfig.AllowGroupToDirectAssignmentConversionForProvisioning && !awsConfig.JoinAllRoles {
+			// This converts group assignment to direct assignment
+			canDirectAssign := awsConfig.JoinAllRoles || awsConfig.SamlRolesUnionEnabled
+			if appUser.Scope == appGroupScope && (!o.connector.awsConfig.AllowGroupToDirectAssignmentConversionForProvisioning || !canDirectAssign) {
 				return nil, fmt.Errorf("okta-aws-connector: connect add individual assignment for user with group assignment '%s'", appUser.Id)
 			}
 
