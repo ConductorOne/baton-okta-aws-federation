@@ -782,8 +782,9 @@ func (o *accountResourceType) Revoke(ctx context.Context, grant *v2.Grant) (anno
 			return nil, nil
 		}
 
-		if appUser.Scope == appGroupScope && !o.connector.awsConfig.AllowGroupToDirectAssignmentConversionForProvisioning || !awsConfig.JoinAllRoles {
-			return nil, fmt.Errorf("okta-aws-connector: connect remove role granted via group assignment '%s'", appUser.Id)
+		canDirectAssign := awsConfig.JoinAllRoles || awsConfig.SamlRolesUnionEnabled
+		if appUser.Scope == appGroupScope && (!o.connector.awsConfig.AllowGroupToDirectAssignmentConversionForProvisioning || !canDirectAssign) {
+			return nil, fmt.Errorf("okta-aws-connector: cannot remove role granted via group assignment '%s'", appUser.Id)
 		}
 
 		samlRoles, err := getSAMLRolesFromAppUserProfile(ctx, appUser)
