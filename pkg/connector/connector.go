@@ -11,10 +11,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws/arn"
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
+	"github.com/conductorone/baton-sdk/pkg/cli"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
 	"github.com/conductorone/baton-sdk/pkg/uhttp"
 	"github.com/okta/okta-sdk-golang/v2/okta"
+
+	cfg "github.com/conductorone/baton-okta-aws-federation/pkg/config"
 )
 
 // TODO: use isNotFoundError() since E0000008 is also a not found error
@@ -110,8 +113,8 @@ var (
 	}
 )
 
-func (o *Okta) ResourceSyncers(ctx context.Context) []connectorbuilder.ResourceSyncer {
-	resourceSyncer := []connectorbuilder.ResourceSyncer{accountBuilder(o)}
+func (o *Okta) ResourceSyncers(ctx context.Context) []connectorbuilder.ResourceSyncerV2 {
+	resourceSyncer := []connectorbuilder.ResourceSyncerV2{accountBuilder(o)}
 	return resourceSyncer
 }
 
@@ -233,40 +236,58 @@ func (c *Okta) Asset(ctx context.Context, asset *v2.AssetRef) (string, io.ReadCl
 	return "", nil, fmt.Errorf("not implemented")
 }
 
-func New(ctx context.Context, cfg *Config) (*Okta, error) {
+// safeCacheInt32 converts int to int32 with bounds checking.
+func safeCacheInt32(val int) (int32, error) {
+	if val > 2147483647 || val < 0 {
+		return 0, fmt.Errorf("value %d is out of range for int32", val)
+	}
+	return int32(val), nil
+}
+
+func New(ctx context.Context, cc *cfg.OktaAwsFederation, opts *cli.ConnectorOpts) (connectorbuilder.ConnectorBuilderV2, []connectorbuilder.Opt, error) {
 	var (
 		oktaClient *okta.Client
 	)
 	client, err := uhttp.NewClient(ctx, uhttp.WithLogger(true, nil))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	if cfg.ApiToken != "" && cfg.Domain != "" {
+	cacheTTI, err := safeCacheInt32(cc.CacheTti)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	cacheTTL, err := safeCacheInt32(cc.CacheTtl)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if cc.ApiToken != "" && cc.Domain != "" {
 		_, oktaClient, err = okta.NewClient(ctx,
-			okta.WithOrgUrl(fmt.Sprintf("https://%s", cfg.Domain)),
-			okta.WithToken(cfg.ApiToken),
+			okta.WithOrgUrl(fmt.Sprintf("https://%s", cc.Domain)),
+			okta.WithToken(cc.ApiToken),
 			okta.WithHttpClientPtr(client),
-			okta.WithCache(cfg.Cache),
-			okta.WithCacheTti(cfg.CacheTTI),
-			okta.WithCacheTtl(cfg.CacheTTL),
+			okta.WithCache(cc.Cache),
+			okta.WithCacheTti(cacheTTI),
+			okta.WithCacheTtl(cacheTTL),
 		)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
 	awsConfig := &awsConfig{
-		OktaAppId: cfg.AWSOktaAppId,
-		AllowGroupToDirectAssignmentConversionForProvisioning: cfg.AllowGroupToDirectAssignmentConversionForProvisioning,
+		OktaAppId: cc.AwsOktaAppId,
+		AllowGroupToDirectAssignmentConversionForProvisioning: cc.AwsAllowGroupToDirectAssignmentConversionForProvisioning,
 	}
 
 	return &Okta{
 		client:    oktaClient,
-		domain:    cfg.Domain,
-		apiToken:  cfg.ApiToken,
+		domain:    cc.Domain,
+		apiToken:  cc.ApiToken,
 		awsConfig: awsConfig,
-	}, nil
+	}, nil, nil
 }
 
 func (c *Okta) getAWSApplicationConfig(ctx context.Context) (*oktaAWSAppSettings, error) {
