@@ -1,9 +1,9 @@
 module github.com/conductorone/baton-okta-aws-federation
 
-go 1.25
+go 1.25.2
 
 require (
-	github.com/conductorone/baton-sdk v0.4.1
+	github.com/conductorone/baton-sdk v0.7.10
 	github.com/deckarep/golang-set/v2 v2.7.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/okta/okta-sdk-golang/v2 v2.20.0
@@ -11,21 +11,22 @@ require (
 )
 
 require (
+	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/aws/aws-lambda-go v1.47.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.71.0 // indirect
 	github.com/conductorone/dpop v0.2.3 // indirect
 	github.com/conductorone/dpop/integrations/dpop_grpc v0.2.3 // indirect
 	github.com/conductorone/dpop/integrations/dpop_oauth2 v0.2.3 // indirect
-	github.com/dolthub/maphash v0.1.0 // indirect
-	github.com/gammazero/deque v1.0.0 // indirect
+	github.com/ebitengine/purego v0.9.1 // indirect
 	github.com/go-jose/go-jose/v4 v4.0.5 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.1 // indirect
 	github.com/jellydator/ttlcache/v3 v3.3.0 // indirect
-	github.com/maypok86/otter v1.2.4 // indirect
+	github.com/maypok86/otter/v2 v2.2.1 // indirect
 	github.com/pquerna/cachecontrol v0.2.0 // indirect
 	github.com/pquerna/xjwt/xkeyset v0.0.0-20241217022915-10fc997b2a9f // indirect
+	github.com/shirou/gopsutil/v4 v4.25.11 // indirect
 	github.com/spf13/viper v1.19.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
@@ -95,16 +96,14 @@ require (
 	github.com/sagikazarmark/locafero v0.7.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
 	github.com/segmentio/ksuid v1.0.4 // indirect
-	github.com/shirou/gopsutil/v3 v3.24.5 // indirect
-	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spf13/afero v1.12.0 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/spf13/cobra v1.8.1 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
-	github.com/tklauser/go-sysconf v0.3.14 // indirect
-	github.com/tklauser/numcpus v0.9.0 // indirect
+	github.com/tklauser/go-sysconf v0.3.16 // indirect
+	github.com/tklauser/numcpus v0.11.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.opentelemetry.io/otel v1.35.0 // indirect
 	go.opentelemetry.io/otel/metric v1.35.0 // indirect
@@ -115,7 +114,7 @@ require (
 	golang.org/x/net v0.36.0 // indirect
 	golang.org/x/oauth2 v0.28.0 // indirect
 	golang.org/x/sync v0.12.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/text v0.23.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250303144028-a0af3efb3deb // indirect
 	google.golang.org/grpc v1.71.0
