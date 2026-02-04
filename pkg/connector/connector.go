@@ -118,18 +118,6 @@ func (o *Okta) ResourceSyncers(ctx context.Context) []connectorbuilder.ResourceS
 	return resourceSyncer
 }
 
-func (c *Okta) ListResourceTypes(ctx context.Context, request *v2.ResourceTypesServiceListResourceTypesRequest) (*v2.ResourceTypesServiceListResourceTypesResponse, error) {
-	resourceTypes := []*v2.ResourceType{
-		resourceTypeUser,
-		resourceTypeGroup,
-		resourceTypeAccount,
-	}
-
-	return &v2.ResourceTypesServiceListResourceTypesResponse{
-		List: resourceTypes,
-	}, nil
-}
-
 func (c *Okta) Metadata(ctx context.Context) (*v2.ConnectorMetadata, error) {
 	_, err := c.Validate(ctx)
 	if err != nil {
