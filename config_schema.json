@@ -1,12 +1,91 @@
 {
   "fields": [
     {
-      "name": "api-token",
-      "displayName": "API token",
-      "description": "The API token for the service account",
-      "placeholder": "Your Okta API token",
+      "name": "log-level",
+      "description": "The log level: debug, info, warn, error",
+      "isOps": true,
+      "stringField": {
+        "defaultValue": "info"
+      }
+    },
+    {
+      "name": "log-level-debug-expires-at",
+      "description": "The timestamp indicating when debug-level logging should expire",
+      "isOps": true,
+      "stringField": {}
+    },
+    {
+      "name": "session-store-maximum-size",
+      "description": "The maximum size of the local in-memory session store cache in bytes.",
+      "isOps": true,
+      "intField": {
+        "defaultValue": "15728640"
+      }
+    },
+    {
+      "name": "otel-collector-endpoint",
+      "description": "The endpoint of the OpenTelemetry collector to send observability data to (used for both tracing and logging if specific endpoints are not provided)",
+      "isOps": true,
+      "stringField": {}
+    },
+    {
+      "name": "otel-collector-endpoint-tls-cert-path",
+      "description": "Path to a file containing a PEM-encoded certificate to use as a CA for TLS connections to the OpenTelemetry collector",
+      "isOps": true,
+      "stringField": {}
+    },
+    {
+      "name": "otel-collector-endpoint-tls-cert",
+      "description": "A PEM-encoded certificate to use as a CA for TLS connections to the OpenTelemetry collector",
+      "isOps": true,
+      "stringField": {}
+    },
+    {
+      "name": "otel-collector-endpoint-tls-insecure",
+      "description": "Allow insecure connections to the OpenTelemetry collector",
+      "isOps": true,
+      "boolField": {}
+    },
+    {
+      "name": "otel-tracing-disabled",
+      "description": "Disable OpenTelemetry tracing",
+      "isOps": true,
+      "boolField": {}
+    },
+    {
+      "name": "otel-logging-disabled",
+      "description": "Disable OpenTelemetry logging",
+      "isOps": true,
+      "boolField": {}
+    },
+    {
+      "name": "health-check",
+      "description": "Enable the HTTP health check endpoint",
+      "isOps": true,
+      "boolField": {}
+    },
+    {
+      "name": "health-check-port",
+      "description": "Port for the HTTP health check endpoint",
+      "isOps": true,
+      "intField": {
+        "defaultValue": "8081"
+      }
+    },
+    {
+      "name": "health-check-bind-address",
+      "description": "Bind address for health check server (127.0.0.1 for localhost-only)",
+      "isOps": true,
+      "stringField": {
+        "defaultValue": "127.0.0.1"
+      }
+    },
+    {
+      "name": "domain",
+      "displayName": "Okta domain",
+      "description": "The URL for the Okta organization",
+      "placeholder": "e.g. acmeco.okta.com",
       "isRequired": true,
-      "isSecret": true,
       "stringField": {
         "rules": {
           "isRequired": true
@@ -14,16 +93,12 @@
       }
     },
     {
-      "name": "aws-allow-group-to-direct-assignment-conversion-for-provisioning",
-      "displayName": "Allow group to direct assignment conversion for provisioning",
-      "description": "Whether to allow group to direct assignment conversion when provisioning",
-      "boolField": {}
-    },
-    {
-      "name": "aws-okta-app-id",
-      "displayName": "AWS Okta App ID",
-      "description": "The Okta app id for the AWS application",
+      "name": "api-token",
+      "displayName": "API token",
+      "description": "The API token for the service account",
+      "placeholder": "Your Okta API token",
       "isRequired": true,
+      "isSecret": true,
       "stringField": {
         "rules": {
           "isRequired": true
@@ -52,10 +127,9 @@
       }
     },
     {
-      "name": "domain",
-      "displayName": "Okta domain",
-      "description": "The URL for the Okta organization",
-      "placeholder": "e.g. acmeco.okta.com",
+      "name": "aws-okta-app-id",
+      "displayName": "AWS Okta App ID",
+      "description": "The Okta app id for the AWS application",
       "isRequired": true,
       "stringField": {
         "rules": {
@@ -64,53 +138,9 @@
       }
     },
     {
-      "name": "log-level",
-      "description": "The log level: debug, info, warn, error",
-      "isOps": true,
-      "stringField": {
-        "defaultValue": "info"
-      }
-    },
-    {
-      "name": "log-level-debug-expires-at",
-      "description": "The timestamp indicating when debug-level logging should expire",
-      "isOps": true,
-      "stringField": {}
-    },
-    {
-      "name": "otel-collector-endpoint",
-      "description": "The endpoint of the OpenTelemetry collector to send observability data to (used for both tracing and logging if specific endpoints are not provided)",
-      "isOps": true,
-      "stringField": {}
-    },
-    {
-      "name": "otel-collector-endpoint-tls-cert",
-      "description": "A PEM-encoded certificate to use as a CA for TLS connections to the OpenTelemetry collector",
-      "isOps": true,
-      "stringField": {}
-    },
-    {
-      "name": "otel-collector-endpoint-tls-cert-path",
-      "description": "Path to a file containing a PEM-encoded certificate to use as a CA for TLS connections to the OpenTelemetry collector",
-      "isOps": true,
-      "stringField": {}
-    },
-    {
-      "name": "otel-collector-endpoint-tls-insecure",
-      "description": "Allow insecure connections to the OpenTelemetry collector",
-      "isOps": true,
-      "boolField": {}
-    },
-    {
-      "name": "otel-logging-disabled",
-      "description": "Disable OpenTelemetry logging",
-      "isOps": true,
-      "boolField": {}
-    },
-    {
-      "name": "otel-tracing-disabled",
-      "description": "Disable OpenTelemetry tracing",
-      "isOps": true,
+      "name": "aws-allow-group-to-direct-assignment-conversion-for-provisioning",
+      "displayName": "Allow group to direct assignment conversion for provisioning",
+      "description": "Whether to allow group to direct assignment conversion when provisioning",
       "boolField": {}
     }
   ],
