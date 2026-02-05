@@ -5,8 +5,10 @@ go 1.25.2
 require (
 	github.com/conductorone/baton-sdk v0.7.14
 	github.com/deckarep/golang-set/v2 v2.7.0
+	github.com/ennyjfrick/ruleguard-logfatal v0.0.2
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/okta/okta-sdk-golang/v2 v2.20.0
+	github.com/quasilyte/go-ruleguard/dsl v0.3.23
 	go.uber.org/zap v1.27.1
 )
 
