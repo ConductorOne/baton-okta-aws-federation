@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws/arn"
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
@@ -27,6 +26,14 @@ const ResourceNotFoundExceptionErrorCode = "E0000007"
 const AccessDeniedErrorCode = "E0000006"
 const ExpectedGroupNameCaptureGroupsWithGroupFilterForMultipleAWSInstances = 3
 
+var (
+	// Cache namespace prefixes.
+	appGroupPrefix    = sessions.WithPrefix("appGroup")
+	notAppGroupPrefix = sessions.WithPrefix("notAppGroup")
+	settingsPrefix    = sessions.WithPrefix("settings")
+	settingsEntry     = "settings"
+)
+
 type Okta struct {
 	client    *okta.Client
 	domain    string
@@ -36,8 +43,6 @@ type Okta struct {
 
 type awsConfig struct {
 	OktaAppId                                             string
-	awsAppConfigCacheMutex                                sync.Mutex
-	oktaAWSAppSettings                                    *oktaAWSAppSettings
 	AllowGroupToDirectAssignmentConversionForProvisioning bool
 }
 
@@ -212,7 +217,7 @@ func (c *Okta) Validate(ctx context.Context) (annotations.Annotations, error) {
 		return nil, err
 	}
 
-	_, err = c.getAWSApplicationConfig(ctx)
+	_, err = c.getAWSApplicationConfig(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -278,14 +283,17 @@ func New(ctx context.Context, cc *cfg.OktaAwsFederation, opts *cli.ConnectorOpts
 	}, nil, nil
 }
 
-func (c *Okta) getAWSApplicationConfig(ctx context.Context) (*oktaAWSAppSettings, error) {
+func (c *Okta) getAWSApplicationConfig(ctx context.Context, ss sessions.SessionStore) (*oktaAWSAppSettings, error) {
 	if c.awsConfig == nil {
 		return nil, nil
 	}
-	c.awsConfig.awsAppConfigCacheMutex.Lock()
-	defer c.awsConfig.awsAppConfigCacheMutex.Unlock()
-	if c.awsConfig.oktaAWSAppSettings != nil {
-		return c.awsConfig.oktaAWSAppSettings, nil
+
+	if ss != nil {
+		cachedSettings, found, err := session.GetJSON[oktaAWSAppSettings](ctx, ss, settingsEntry, settingsPrefix)
+
+		if err == nil && found {
+			return &cachedSettings, nil
+		}
 	}
 
 	if c.awsConfig.OktaAppId == "" {
@@ -376,7 +384,12 @@ func (c *Okta) getAWSApplicationConfig(ctx context.Context) (*oktaAWSAppSettings
 		IdentityProviderArnAccountID: accountId,
 		SamlRolesUnionEnabled:        samlRolesUnionEnabled,
 	}
-	c.awsConfig.oktaAWSAppSettings = oktaAWSAppSettings
+
+
+	if ss != nil {
+		_ = session.SetJSON(ctx, ss, settingsEntry, *oktaAWSAppSettings, settingsPrefix)
+	}
+
 	return oktaAWSAppSettings, nil
 }
 
@@ -421,12 +434,6 @@ func isSamlRolesUnionEnabled(ctx context.Context, client *okta.Client, appId str
 	}
 	return false, nil
 }
-
-var (
-	// Cache namespace prefixes.
-	appGroupPrefix    = sessions.WithPrefix("appGroup")
-	notAppGroupPrefix = sessions.WithPrefix("notAppGroup")
-)
 
 func (a *oktaAWSAppSettings) getAppGroupFromCache(ctx context.Context, ss sessions.SessionStore, groupId string) (*OktaAppGroupWrapper, error) {
 	cachedAppGroup, found, err := session.GetJSON[[]string](ctx, ss, groupId, appGroupPrefix)

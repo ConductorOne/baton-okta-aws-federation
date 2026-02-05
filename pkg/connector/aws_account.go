@@ -63,7 +63,7 @@ func (o *accountResourceType) List(
 	attrs resource2.SyncOpAttrs,
 ) ([]*v2.Resource, *resource2.SyncOpResults, error) {
 	token := &attrs.PageToken
-	awsConfig, err := o.connector.getAWSApplicationConfig(ctx)
+	awsConfig, err := o.connector.getAWSApplicationConfig(ctx, attrs.Session)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error getting aws app settings config")
 	}
@@ -137,7 +137,7 @@ func (o *accountResourceType) Entitlements(
 	attrs resource2.SyncOpAttrs,
 ) ([]*v2.Entitlement, *resource2.SyncOpResults, error) {
 	token := &attrs.PageToken
-	awsConfig, err := o.connector.getAWSApplicationConfig(ctx)
+	awsConfig, err := o.connector.getAWSApplicationConfig(ctx, attrs.Session)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error getting aws app settings config")
 	}
@@ -235,7 +235,7 @@ func (o *accountResourceType) Grants(
 	attrs resource2.SyncOpAttrs,
 ) ([]*v2.Grant, *resource2.SyncOpResults, error) {
 	token := &attrs.PageToken
-	awsConfig, err := o.connector.getAWSApplicationConfig(ctx)
+	awsConfig, err := o.connector.getAWSApplicationConfig(ctx, attrs.Session)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error getting aws app settings config")
 	}
@@ -294,7 +294,7 @@ func (o *accountResourceType) Grants(
 func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resource, attrs resource2.SyncOpAttrs, page string) ([]*v2.Grant, *okta.Response, error) {
 	token := &attrs.PageToken
 
-	awsConfig, err := o.connector.getAWSApplicationConfig(ctx)
+	awsConfig, err := o.connector.getAWSApplicationConfig(ctx, attrs.Session)
 	if err != nil {
 		return nil, nil, fmt.Errorf("okta-aws-connector: error getting aws app settings config")
 	}
@@ -364,7 +364,7 @@ func (o *accountResourceType) collectRolesFromUserGroups(
 func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Resource, attrs resource2.SyncOpAttrs, page string) ([]*v2.Grant, *okta.Response, error) {
 	token := &attrs.PageToken
 
-	awsConfig, err := o.connector.getAWSApplicationConfig(ctx)
+	awsConfig, err := o.connector.getAWSApplicationConfig(ctx, attrs.Session)
 	if err != nil {
 		return nil, nil, fmt.Errorf("okta-aws-connector: error getting aws app settings config")
 	}
@@ -557,7 +557,7 @@ func getSAMLRoles(profile map[string]interface{}) ([]string, error) {
 
 func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Context, ss sessions.SessionStore, groupId string) (*OktaAppGroupWrapper, error) {
 	l := ctxzap.Extract(ctx)
-	awsConfig, err := o.connector.getAWSApplicationConfig(ctx)
+	awsConfig, err := o.connector.getAWSApplicationConfig(ctx, ss)
 	if err != nil {
 		return nil, err
 	}
@@ -623,7 +623,7 @@ func (o *accountResourceType) Grant(ctx context.Context, principal *v2.Resource,
 	if principal.Id.ResourceType != resourceTypeUser.Id && principal.Id.ResourceType != resourceTypeGroup.Id {
 		return nil, fmt.Errorf("okta-aws-connector: only users or groups can be granted app membership")
 	}
-	awsConfig, err := o.connector.getAWSApplicationConfig(ctx)
+	awsConfig, err := o.connector.getAWSApplicationConfig(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error getting aws app settings config")
 	}
@@ -767,7 +767,7 @@ func (o *accountResourceType) Revoke(ctx context.Context, grant *v2.Grant) (anno
 	if grant.Principal.Id.ResourceType != resourceTypeUser.Id && grant.Principal.Id.ResourceType != resourceTypeGroup.Id {
 		return nil, fmt.Errorf("okta-aws-connector: only users or groups can be have aws account role revoked")
 	}
-	awsConfig, err := o.connector.getAWSApplicationConfig(ctx)
+	awsConfig, err := o.connector.getAWSApplicationConfig(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("okta-aws-connector: error getting aws app settings config")
 	}
