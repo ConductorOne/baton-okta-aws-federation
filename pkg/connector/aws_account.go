@@ -16,6 +16,7 @@ import (
 	sdkEntitlement "github.com/conductorone/baton-sdk/pkg/types/entitlement"
 	sdkGrant "github.com/conductorone/baton-sdk/pkg/types/grant"
 	resource2 "github.com/conductorone/baton-sdk/pkg/types/resource"
+	"github.com/conductorone/baton-sdk/pkg/types/sessions"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"github.com/okta/okta-sdk-golang/v2/okta"
@@ -260,11 +261,11 @@ func (o *accountResourceType) Grants(
 
 	switch bag.ResourceTypeID() {
 	case resourceTypeUser.Id:
-		rv, oktaResp, err = o.userGrants(ctx, resource, token, page)
+		rv, oktaResp, err = o.userGrants(ctx, resource, attrs, page)
 	case resourceTypeGroup.Id:
-		rv, oktaResp, err = o.groupGrants(ctx, resource, token, page)
+		rv, oktaResp, err = o.groupGrants(ctx, resource, attrs, page)
 	default:
-		rv, oktaResp, err = o.groupGrants(ctx, resource, token, page)
+		rv, oktaResp, err = o.groupGrants(ctx, resource, attrs, page)
 	}
 	if err != nil {
 		return nil, nil, err
@@ -290,7 +291,9 @@ func (o *accountResourceType) Grants(
 	}, nil
 }
 
-func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resource, token *pagination.Token, page string) ([]*v2.Grant, *okta.Response, error) {
+func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resource, attrs resource2.SyncOpAttrs, page string) ([]*v2.Grant, *okta.Response, error) {
+	token := &attrs.PageToken
+
 	awsConfig, err := o.connector.getAWSApplicationConfig(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("okta-aws-connector: error getting aws app settings config")
@@ -319,7 +322,7 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 		// For group-scoped users (no direct assignment) and when Union/JoinAllRoles is disabled,
 		// samlRoles are gathered by inspecting the user's group memberships
 		if appUser.Scope == appGroupScope && !awsConfig.JoinAllRoles && !awsConfig.SamlRolesUnionEnabled {
-			appUserSAMLRolesMap, err = o.collectRolesFromUserGroups(ctx, appUser.Id)
+			appUserSAMLRolesMap, err = o.collectRolesFromUserGroups(ctx, attrs.Session, appUser.Id)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -335,6 +338,7 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 
 func (o *accountResourceType) collectRolesFromUserGroups(
 	ctx context.Context,
+	ss sessions.SessionStore,
 	userID string,
 ) (mapset.Set[string], error) {
 	userGroups, _, err := listUsersGroupsClient(ctx, o.connector.client, userID)
@@ -345,7 +349,7 @@ func (o *accountResourceType) collectRolesFromUserGroups(
 	roles := mapset.NewSet[string]()
 
 	for _, group := range userGroups {
-		appGroup, err := o.getOktaAppGroupFromCacheOrFetch(ctx, group.Id)
+		appGroup, err := o.getOktaAppGroupFromCacheOrFetch(ctx, ss, group.Id)
 		if err != nil {
 			return nil, err
 		}
@@ -357,7 +361,9 @@ func (o *accountResourceType) collectRolesFromUserGroups(
 	return roles, nil
 }
 
-func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Resource, token *pagination.Token, page string) ([]*v2.Grant, *okta.Response, error) {
+func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Resource, attrs resource2.SyncOpAttrs, page string) ([]*v2.Grant, *okta.Response, error) {
+	token := &attrs.PageToken
+
 	awsConfig, err := o.connector.getAWSApplicationConfig(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("okta-aws-connector: error getting aws app settings config")
@@ -399,7 +405,19 @@ func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Reso
 		}
 
 		// TODO(lauren) we only need this when !awsConfig.JoinAllRoles
-		awsConfig.appGroupCache.Store(appGroup.Id, appGroupSAMLRoles)
+		// awsConfig.appGroupCache.Store(appGroup.Id, appGroupSAMLRoles)
+		l := ctxzap.Extract(ctx)
+		// err = session.SetJSON(ctx, attrs.Session, appGroup.Id, appGroupSAMLRoles.samlRoles, appGroupPrefix)
+		err = awsConfig.setAppGroupInCache(ctx, attrs.Session, appGroup.Id, appGroupSAMLRoles)
+		l.Info("group grants SetJSON call -- with error object?", zap.Error(err))
+
+		appGroup2, err2 := awsConfig.getAppGroupFromCache(ctx, attrs.Session, appGroup.Id)
+		if err2 != nil {
+			l.Error("getAppGroupFromCache returned error", zap.Error(err2))
+		} else {
+			l.Info("original and new saml roles", zap.Strings("og_saml_roles", appGroupSAMLRoles.samlRoles), zap.Strings("new_saml_roles", appGroup2.samlRoles))
+		}
+
 		for _, role := range appGroupSAMLRoles.samlRoles {
 			if !awsConfig.JoinAllRoles {
 				rv = append(rv, o.accountGrantGroup(resource, role, appGroup.Id))
@@ -548,13 +566,13 @@ func getSAMLRoles(profile map[string]interface{}) ([]string, error) {
 	return ret, nil
 }
 
-func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Context, groupId string) (*OktaAppGroupWrapper, error) {
+func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Context, ss sessions.SessionStore, groupId string) (*OktaAppGroupWrapper, error) {
 	l := ctxzap.Extract(ctx)
 	awsConfig, err := o.connector.getAWSApplicationConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
-	appGroupSAMLRoles, err := awsConfig.getAppGroupFromCache(ctx, groupId)
+	appGroupSAMLRoles, err := awsConfig.getAppGroupFromCache(ctx, ss, groupId)
 	if err != nil {
 		return nil, err
 	}
@@ -562,7 +580,7 @@ func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Contex
 		l.Debug("okta-aws-connector: found group in cache", zap.String("groupId", groupId))
 		return appGroupSAMLRoles, nil
 	}
-	notAnAppGroup, err := awsConfig.checkIfNotAppGroupFromCache(ctx, groupId)
+	notAnAppGroup, err := awsConfig.checkIfNotAppGroupFromCache(ctx, ss, groupId)
 	if err != nil {
 		return nil, err
 	}
@@ -585,7 +603,12 @@ func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Contex
 			l.Warn("okta-aws-connector: ", zap.String("ErrorCode", errOkta.ErrorCode), zap.String("ErrorSummary", errOkta.ErrorSummary))
 			return nil, fmt.Errorf("okta-aws-connector: %v", errOkta)
 		}
-		awsConfig.notAppGroupCache.Store(groupId, true)
+		// awsConfig.notAppGroupCache.Store(groupId, true)
+
+		// err = session.SetJSON(ctx, ss, groupId, true, notAppGroupPrefix)
+		err = awsConfig.setNotAppGroupInCache(ctx, ss, groupId, true)
+		l.Info("SetJSON for notAppGroup - error variable provided?", zap.Error(err))
+
 		return nil, nil
 	}
 
@@ -593,7 +616,11 @@ func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Contex
 	if err != nil {
 		return nil, err
 	}
-	awsConfig.appGroupCache.Store(groupId, appGroupSAMLRoles)
+
+	// err = session.SetJSON(ctx, ss, groupId, appGroupSAMLRoles, appGroupPrefix)
+	err = awsConfig.setAppGroupInCache(ctx, ss, groupId, appGroupSAMLRoles)
+	l.Info("SetJSON for AppGroup - error variable provided?", zap.Error(err))
+	// awsConfig.appGroupCache.Store(groupId, appGroupSAMLRoles)
 
 	return appGroupSAMLRoles, nil
 }
