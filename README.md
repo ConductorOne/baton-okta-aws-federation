@@ -1,6 +1,6 @@
 ![Baton Logo](./docs/images/baton-logo.png)
 
-# `baton-okta-aws-federation` [![Go Reference](https://pkg.go.dev/badge/github.com/conductorone/baton-okta-aws-federation.svg)](https://pkg.go.dev/github.com/conductorone/baton-okta-aws-federation) ![main ci](https://github.com/conductorone/baton-okta-aws-federation/actions/workflows/main.yaml/badge.svg)
+# `baton-okta-aws-federation` [![Go Reference](https://pkg.go.dev/badge/github.com/conductorone/baton-okta-aws-federation.svg)](https://pkg.go.dev/github.com/conductorone/baton-okta-aws-federation) ![ci](https://github.com/conductorone/baton-okta-aws-federation/actions/workflows/ci.yaml/badge.svg) ![verify](https://github.com/conductorone/baton-okta-aws-federation/actions/workflows/verify.yaml/badge.svg)
 
 `baton-okta-aws-federation` is a connector for Okta built using the [Baton SDK](https://github.com/conductorone/baton-sdk). It communicates with the Okta API to sync data about which groups and users have access to applications, groups, and roles within an Okta domain.
 
@@ -82,13 +82,13 @@ In the previous example we granted the custom role `cr0kuwv5507zJCtSy697` to use
 - Revoking custom role grants(Unassigns a Member)
 ```
 BATON_API_TOKEN='oktaAPIToken' BATON_DOMAIN='domain-1234.okta.com' baton-okta-aws-federation \
---revoke-grant 'resourceset-binding:iamkuwy3gqcfNexfQ697:cr0kuwv5507zJCtSy697:member:user:00ujp51vjgWd6ylZ6697' 
+--revoke-grant 'resourceset-binding:iamkuwy3gqcfNexfQ697:cr0kuwv5507zJCtSy697:member:user:00ujp51vjgWd6ylZ6697'
 ```
 
 - Revoking everything associated to custom role(Deletes a Binding of a Role)
 ```
 BATON_API_TOKEN='oktaAPIToken' BATON_DOMAIN='domain-1234.okta.com' baton-okta-aws-federation \
-resource-set:iamkuwy3gqcfNexfQ697:bindings:custom-role:cr0kuwv5507zJCtSy697 
+resource-set:iamkuwy3gqcfNexfQ697:bindings:custom-role:cr0kuwv5507zJCtSy697
 ```
 
 # Contributing, Support and Issues
