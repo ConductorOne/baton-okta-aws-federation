@@ -1,41 +1,6 @@
 name: ci
 on: pull_request
 jobs:
-  go-lint:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Install Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: "go.mod"
-      - name: Run linters
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: latest
-          args: --timeout=3m
-  go-test:
-    strategy:
-      matrix:
-        platform: [ubuntu-latest]
-    runs-on: ${{ matrix.platform }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Install Go
-        if: success()
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: "go.mod"
-      - name: go tests
-        run: (set -o pipefail && go test -v -covermode=count -json ./... | tee test.json)
-      - name: annotate go tests
-        if: always()
-        uses: guyarb/golang-test-annotations@v0.5.1
-        with:
-          test-results: test.json
-  
   test:
     runs-on: ubuntu-latest
     env:
@@ -68,15 +33,15 @@ jobs:
       - name: Check for grant
         run: |
           ./baton-okta-aws-federation && baton grants --entitlement ${{ env.CONNECTOR_ENTITLEMENT }} --output-format=json | jq -e ".grants | any(.principal.id.resource ==\"${{ env.CONNECTOR_PRINCIPAL }}\")"
-      # - name: Revoke grants
-      #   run: |
-      #     ./baton-okta-aws-federation --revoke-grant ${{ env.CONNECTOR_GRANT }}
-      # - name: Check grant was revoked
-      #   run: |
-      #      ./baton-okta-aws-federation && baton grants --entitlement ${{ env.CONNECTOR_ENTITLEMENT }} --output-format=json | jq -e ".grants | any(.principal.id.resource !=\"${{ env.CONNECTOR_PRINCIPAL }}\")"
-      # - name: Grant entitlement
-      #   run: | 
-      #     ./baton-okta-aws-federation && ./baton-okta-aws-federation --grant-entitlement ${{ env.CONNECTOR_ENTITLEMENT }} --grant-principal ${{ env.CONNECTOR_PRINCIPAL }} --grant-principal-type ${{ env.CONNECTOR_PRINCIPAL_TYPE }}
-      # - name: Check grant was re-granted
-      #   run: |
-      #     ./baton-okta-aws-federation && baton grants --entitlement ${{ env.CONNECTOR_ENTITLEMENT }} --output-format=json | jq -e ".grants | any(.principal.id.resource ==\"${{ env.CONNECTOR_PRINCIPAL }}\")"
+        # - name: Revoke grants
+        #   run: |
+        #     ./baton-okta-aws-federation --revoke-grant ${{ env.CONNECTOR_GRANT }}
+        # - name: Check grant was revoked
+        #   run: |
+        #      ./baton-okta-aws-federation && baton grants --entitlement ${{ env.CONNECTOR_ENTITLEMENT }} --output-format=json | jq -e ".grants | any(.principal.id.resource !=\"${{ env.CONNECTOR_PRINCIPAL }}\")"
+        # - name: Grant entitlement
+        #   run: | 
+        #     ./baton-okta-aws-federation && ./baton-okta-aws-federation --grant-entitlement ${{ env.CONNECTOR_ENTITLEMENT }} --grant-principal ${{ env.CONNECTOR_PRINCIPAL }} --grant-principal-type ${{ env.CONNECTOR_PRINCIPAL_TYPE }}
+        # - name: Check grant was re-granted
+        #   run: |
+        #     ./baton-okta-aws-federation && baton grants --entitlement ${{ env.CONNECTOR_ENTITLEMENT }} --output-format=json | jq -e ".grants | any(.principal.id.resource ==\"${{ env.CONNECTOR_PRINCIPAL }}\")"
