@@ -8,7 +8,6 @@ require (
 	github.com/deckarep/golang-set/v2 v2.7.0
 	github.com/ennyjfrick/ruleguard-logfatal v0.0.2
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
-	github.com/okta/okta-sdk-golang/v2 v2.20.0
 	github.com/quasilyte/go-ruleguard/dsl v0.3.23
 	go.uber.org/zap v1.27.1
 )
@@ -61,7 +60,6 @@ require (
 require (
 	filippo.io/age v1.2.1 // indirect
 	filippo.io/edwards25519 v1.1.0 // indirect
-	github.com/BurntSushi/toml v1.4.0 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.41.0
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.10 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.29.2 // indirect

@@ -9,10 +9,6 @@ filippo.io/age/internal/stream
 ## explicit; go 1.20
 filippo.io/edwards25519
 filippo.io/edwards25519/field
-# github.com/BurntSushi/toml v1.4.0
-## explicit; go 1.18
-github.com/BurntSushi/toml
-github.com/BurntSushi/toml/internal
 # github.com/Masterminds/semver/v3 v3.4.0
 ## explicit; go 1.21
 github.com/Masterminds/semver/v3
@@ -424,11 +420,6 @@ github.com/mitchellh/mapstructure
 # github.com/ncruces/go-strftime v0.1.9
 ## explicit; go 1.17
 github.com/ncruces/go-strftime
-# github.com/okta/okta-sdk-golang/v2 v2.20.0
-## explicit; go 1.19
-github.com/okta/okta-sdk-golang/v2/okta
-github.com/okta/okta-sdk-golang/v2/okta/cache
-github.com/okta/okta-sdk-golang/v2/okta/query
 # github.com/patrickmn/go-cache v0.0.0-20180815053127-5633e0862627
 ## explicit
 github.com/patrickmn/go-cache
