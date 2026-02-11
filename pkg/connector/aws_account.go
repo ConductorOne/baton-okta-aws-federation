@@ -44,8 +44,8 @@ const (
 	appUserScope  = "USER"
 	appGroupScope = "GROUP"
 
-    apiPathApplicationGroup = "/api/v1/apps/%s/groups/%s"
-    apiPathSamlRoles = "/api/v1/internal/apps/%s/types"
+	apiPathApplicationGroup = "/api/v1/apps/%s/groups/%s"
+	apiPathSamlRoles = "/api/v1/internal/apps/%s/types"
 )
 
 func (o *accountResourceType) ResourceType(_ context.Context) *v2.ResourceType {
@@ -910,6 +910,9 @@ func (o *accountResourceType) Revoke(ctx context.Context, grant *v2.Grant) (anno
 		}
 
 		appUserProfile := appUser.Profile
+		if appUserProfile == nil {
+			return nil, fmt.Errorf("okta-aws-connector: app user profile '%s' is nil", *appUser.Id)
+		}
 
 		newSamlRoles := removeSamlRole(samlRoles, samlRoleToRemove)
 
@@ -1069,7 +1072,7 @@ func listGroupsHelperV5(ctx context.Context, client *oktav5.APIClient, token *pa
 		Execute()
 
 	if err != nil {
-		return nil, nil, fmt.Errorf("okta-connectorv2: failed to fetch groups from okta: %w", handleOktaResponseErrorV5(resp, err))
+		return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch groups from okta: %w", handleOktaResponseErrorV5(resp, err))
 	}
 	reqCtx, err := responseToContextV5(token, resp)
 	if err != nil {
@@ -1083,7 +1086,7 @@ func listUsersGroupsClientV5(ctx context.Context, client *oktav5.APIClient, user
 	users, resp, err := client.UserAPI.ListUserGroups(ctx, userId).
 		Execute()
 	if err != nil {
-		return nil, nil, fmt.Errorf("okta-connectorv2: failed to fetch group users from okta: %w", handleOktaResponseErrorV5(resp, err))
+		return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch group users from okta: %w", handleOktaResponseErrorV5(resp, err))
 	}
 
 	reqCtx, err := responseToContextV5(&pagination.Token{}, resp)
