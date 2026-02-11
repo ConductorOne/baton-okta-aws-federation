@@ -17,7 +17,6 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/types/sessions"
 	"github.com/conductorone/baton-sdk/pkg/uhttp"
 	oktav5 "github.com/conductorone/okta-sdk-golang/v5/okta"
-	"github.com/okta/okta-sdk-golang/v2/okta"
 
 	cfg "github.com/conductorone/baton-okta-aws-federation/pkg/config"
 )
@@ -36,7 +35,6 @@ var (
 )
 
 type Okta struct {
-	client    *okta.Client
 	clientV5  *oktav5.APIClient
 	domain    string
 	apiToken  string
@@ -241,7 +239,6 @@ func safeCacheInt32(val int) (int32, error) {
 
 func New(ctx context.Context, cc *cfg.OktaAwsFederation, opts *cli.ConnectorOpts) (connectorbuilder.ConnectorBuilderV2, []connectorbuilder.Opt, error) {
 	var (
-		oktaClient   *okta.Client
 		oktaClientV5 *oktav5.APIClient
 	)
 	client, err := uhttp.NewClient(ctx, uhttp.WithLogger(true, nil))
@@ -260,18 +257,6 @@ func New(ctx context.Context, cc *cfg.OktaAwsFederation, opts *cli.ConnectorOpts
 	}
 
 	if cc.ApiToken != "" && cc.Domain != "" {
-		_, oktaClient, err = okta.NewClient(ctx,
-			okta.WithOrgUrl(fmt.Sprintf("https://%s", cc.Domain)),
-			okta.WithToken(cc.ApiToken),
-			okta.WithHttpClientPtr(client),
-			okta.WithCache(cc.Cache),
-			okta.WithCacheTti(cacheTTI),
-			okta.WithCacheTtl(cacheTTL),
-		)
-		if err != nil {
-			return nil, nil, err
-		}
-
 		config, err := oktav5.NewConfiguration(
 			oktav5.WithOrgUrl(fmt.Sprintf("https://%s", cc.Domain)),
 			oktav5.WithToken(cc.ApiToken),
@@ -293,7 +278,6 @@ func New(ctx context.Context, cc *cfg.OktaAwsFederation, opts *cli.ConnectorOpts
 	}
 
 	return &Okta{
-		client:    oktaClient,
 		domain:    cc.Domain,
 		apiToken:  cc.ApiToken,
 		clientV5:  oktaClientV5,

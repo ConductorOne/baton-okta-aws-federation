@@ -10,33 +10,14 @@ import (
 
 	"github.com/conductorone/baton-sdk/pkg/pagination"
 	oktav5 "github.com/conductorone/okta-sdk-golang/v5/okta"
-	"github.com/okta/okta-sdk-golang/v2/okta"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 const ContentType = "application/json"
 
-type responseContext struct {
-	OktaResponse *okta.Response
-}
-
 type responseContextV5 struct {
 	OktaResponse *oktav5.APIResponse
-}
-
-func responseToContext(token *pagination.Token, resp *okta.Response) (*responseContext, error) {
-	u, err := url.Parse(resp.NextPage)
-	if err != nil {
-		return nil, err
-	}
-
-	after := u.Query().Get("after")
-	token.Token = after
-
-	return &responseContext{
-		OktaResponse: resp,
-	}, nil
 }
 
 func responseToContextV5(token *pagination.Token, resp *oktav5.APIResponse) (*responseContextV5, error) {
@@ -51,21 +32,6 @@ func responseToContextV5(token *pagination.Token, resp *oktav5.APIResponse) (*re
 	return &responseContextV5{
 		OktaResponse: resp,
 	}, nil
-}
-
-func getError(response *okta.Response) (okta.Error, error) {
-	var errOkta okta.Error
-	bytes, err := io.ReadAll(response.Body)
-	if err != nil {
-		return okta.Error{}, err
-	}
-
-	err = json.Unmarshal(bytes, &errOkta)
-	if err != nil {
-		return okta.Error{}, err
-	}
-
-	return errOkta, nil
 }
 
 func getErrorV5(response *oktav5.APIResponse) (oktav5.Error, error) {

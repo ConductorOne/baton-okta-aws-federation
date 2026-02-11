@@ -9,20 +9,9 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
 	oktav5 "github.com/conductorone/okta-sdk-golang/v5/okta"
-	"github.com/okta/okta-sdk-golang/v2/okta"
 )
 
 const defaultLimit = 1000
-
-func parseGetResp(resp *okta.Response) (annotations.Annotations, error) {
-	var annos annotations.Annotations
-	if resp != nil {
-		if desc, err := ratelimit.ExtractRateLimitData(resp.StatusCode, &resp.Header); err == nil {
-			annos.WithRateLimiting(desc)
-		}
-	}
-	return annos, nil
-}
 
 func parseRespV5(resp *oktav5.APIResponse) (string, annotations.Annotations, error) {
 	var annos annotations.Annotations
@@ -42,6 +31,16 @@ func parseRespV5(resp *oktav5.APIResponse) (string, annotations.Annotations, err
 	}
 
 	return nextPage, annos, nil
+}
+
+func parseGetRespV5(resp *oktav5.APIResponse) (annotations.Annotations, error) {
+	var annos annotations.Annotations
+	if resp != nil {
+		if desc, err := ratelimit.ExtractRateLimitData(resp.StatusCode, &resp.Header); err == nil {
+			annos.WithRateLimiting(desc)
+		}
+	}
+	return annos, nil
 }
 
 func parsePageToken(token string, resourceID *v2.ResourceId) (*pagination.Bag, string, error) {
