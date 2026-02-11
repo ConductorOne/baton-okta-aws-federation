@@ -537,6 +537,10 @@ func (o *accountResourceType) listAWSSamlRoles(ctx context.Context) (*AWSRoles, 
 	}
 	defer httpResp.Body.Close()
 
+	if httpResp.StatusCode >= 400 {
+		return nil, nil, fmt.Errorf("okta-aws-connector: failed AWS saml roles list request, status code %d", httpResp.StatusCode)
+	}
+
 	var awsRoles AWSRoles
 	if err := json.NewDecoder(httpResp.Body).Decode(&awsRoles); err != nil {
 		return nil, nil, fmt.Errorf("okta-aws-connector: failed to decode response: %w", err)
@@ -1034,6 +1038,10 @@ func updateApplicationGroup(
 		return nil, fmt.Errorf("okta-aws-connector: error updating application group: %w", err)
 	}
 	defer httpResp.Body.Close()
+
+	if httpResp.StatusCode >= 400 {
+		return nil, fmt.Errorf("okta-aws-connector: failed saml roles replace request, status code %d", httpResp.StatusCode)
+	}
 
 	var appGroup oktav5.ApplicationGroupAssignment
 	if err := json.NewDecoder(httpResp.Body).Decode(&appGroup); err != nil {
