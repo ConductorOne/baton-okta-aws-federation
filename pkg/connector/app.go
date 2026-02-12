@@ -20,13 +20,16 @@ func listApplicationGroupAssignmentsV5(
 		After(after).
 		Limit(defaultLimit).
 		Execute()
-	if err != nil {
-		return nil, nil, fmt.Errorf("okta-connectorv2: failed to fetch app group assignments from okta: %w", handleOktaResponseErrorV5(resp, err))
+
+	// Always convert response to context to preserve rate limit information.
+	var reqCtx *responseContextV5
+	if resp != nil {
+		defer resp.Body.Close()
+		reqCtx, _ = responseToContextV5(token, resp)
 	}
 
-	reqCtx, err := responseToContextV5(token, resp)
 	if err != nil {
-		return nil, nil, err
+		return nil, reqCtx, fmt.Errorf("okta-connectorv2: failed to fetch app group assignments from okta: %w", handleOktaResponseErrorV5(resp, err))
 	}
 
 	return applicationGroupAssignments, reqCtx, nil
@@ -37,13 +40,15 @@ func listApplicationUsersV5(ctx context.Context, client *oktav5.APIClient, appID
 		After(after).
 		Limit(defaultLimit).
 		Execute()
-	if err != nil {
-		return nil, nil, fmt.Errorf("okta-connectorv2: failed to fetch app users from okta: %w", handleOktaResponseErrorV5(resp, err))
+
+	var reqCtx *responseContextV5
+	if resp != nil {
+		defer resp.Body.Close()
+		reqCtx, _ = responseToContextV5(token, resp)
 	}
 
-	reqCtx, err := responseToContextV5(token, resp)
 	if err != nil {
-		return nil, nil, err
+		return nil, reqCtx, fmt.Errorf("okta-connectorv2: failed to fetch app users from okta: %w", handleOktaResponseErrorV5(resp, err))
 	}
 
 	return applicationUsers, reqCtx, nil

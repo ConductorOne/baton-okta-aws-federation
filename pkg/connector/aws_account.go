@@ -279,13 +279,16 @@ func (o *accountResourceType) Grants(
 	default:
 		rv, oktaResp, err = o.groupGrants(ctx, resource, attrs, page)
 	}
-	if err != nil {
-		return nil, nil, err
-	}
 
-	nextPage, annos, err := parseRespV5(oktaResp)
-	if err != nil {
-		return nil, nil, fmt.Errorf("okta-aws-connector: failed to parse response: %w", err)
+	// Parse response to extract rate limit annotations even if there's an error.
+	nextPage, annos, parseErr := parseRespV5(oktaResp)
+	if parseErr != nil {
+		return nil, nil, fmt.Errorf("okta-aws-connector: failed to parse response: %w", parseErr)
+	} else if err != nil {
+		// Annotations here contain rate-limiting information.
+		return nil, &resource2.SyncOpResults{
+			Annotations: annos,
+		}, err
 	}
 
 	err = bag.Next(nextPage)
@@ -316,7 +319,11 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 
 	appUsers, respContext, err := listApplicationUsersV5(ctx, o.connector.clientV5, o.connector.awsConfig.OktaAppId, token, page)
 	if err != nil {
-		return nil, nil, fmt.Errorf("okta-aws-connector: error listing application users %w", err)
+		var oktaResp *oktav5.APIResponse
+		if respContext != nil {
+			oktaResp = respContext.OktaResponse
+		}
+		return nil, oktaResp, fmt.Errorf("okta-aws-connector: error listing application users %w", err)
 	}
 
 	for _, appUser := range appUsers {
@@ -331,7 +338,7 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 		if *appUser.Scope == appUserScope || (*appUser.Scope == appGroupScope && awsConfig.SamlRolesUnionEnabled) {
 			appUserSAMLRoles, err := getSAMLRolesFromAppUserProfileV5(ctx, appUser)
 			if err != nil {
-				return nil, nil, fmt.Errorf("okta-aws-connector: failed to get saml roles for user '%v': %w", appUser.Id, err)
+				return nil, respContext.OktaResponse, fmt.Errorf("okta-aws-connector: failed to get saml roles for user '%v': %w", appUser.Id, err)
 			}
 			appUserSAMLRolesMap.Append(appUserSAMLRoles...)
 		}
@@ -344,9 +351,14 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 		// For group-scoped users (no direct assignment) and when Union/JoinAllRoles is disabled,
 		// samlRoles are gathered by inspecting the user's group memberships
 		if *appUser.Scope == appGroupScope && !awsConfig.JoinAllRoles && !awsConfig.SamlRolesUnionEnabled {
-			appUserSAMLRolesMap, err = o.collectRolesFromUserGroups(ctx, attrs.Session, *appUser.Id)
+			var collectRolesRespCtx *responseContextV5
+			appUserSAMLRolesMap, collectRolesRespCtx, err = o.collectRolesFromUserGroups(ctx, attrs.Session, *appUser.Id)
 			if err != nil {
-				return nil, nil, err
+				return nil, collectRolesRespCtx.OktaResponse, err
+			}
+
+			if collectRolesRespCtx != nil {
+				respContext = collectRolesRespCtx
 			}
 		}
 
@@ -362,12 +374,13 @@ func (o *accountResourceType) collectRolesFromUserGroups(
 	ctx context.Context,
 	ss sessions.SessionStore,
 	userID string,
-) (mapset.Set[string], error) {
+) (mapset.Set[string], *responseContextV5, error) {
 	l := ctxzap.Extract(ctx)
 
-	userGroups, _, err := listUsersGroupsClientV5(ctx, o.connector.clientV5, userID)
+	var respCtx *responseContextV5
+	userGroups, respCtx, err := listUsersGroupsClientV5(ctx, o.connector.clientV5, userID)
 	if err != nil {
-		return nil, fmt.Errorf("okta-aws-connector: failed to get groups for user '%s': %w", userID, err)
+		return nil, respCtx, fmt.Errorf("okta-aws-connector: failed to get groups for user '%s': %w", userID, err)
 	}
 
 	roles := mapset.NewSet[string]()
@@ -378,16 +391,17 @@ func (o *accountResourceType) collectRolesFromUserGroups(
 			continue
 		}
 
-		appGroup, err := o.getOktaAppGroupFromCacheOrFetch(ctx, ss, *group.Id)
+		appGroup, respCtx, err := o.getOktaAppGroupFromCacheOrFetch(ctx, ss, *group.Id)
 		if err != nil {
-			return nil, err
+			return nil, respCtx, err
 		}
+
 		if appGroup != nil {
 			roles.Append(appGroup.samlRoles...)
 		}
 	}
 
-	return roles, nil
+	return roles, respCtx, nil
 }
 
 func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Resource, attrs resource2.SyncOpAttrs, page string) ([]*v2.Grant, *oktav5.APIResponse, error) {
@@ -403,7 +417,11 @@ func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Reso
 	if awsConfig.UseGroupMapping {
 		groups, respCtx, err := listGroupsHelperV5(ctx, o.connector.clientV5, token, page)
 		if err != nil {
-			return nil, nil, fmt.Errorf("okta-aws-connector: failed to list groups: %w", err)
+			var oktaResp *oktav5.APIResponse
+			if respCtx != nil {
+				oktaResp = respCtx.OktaResponse
+			}
+			return nil, oktaResp, fmt.Errorf("okta-aws-connector: failed to list groups: %w", err)
 		}
 		for _, group := range groups {
 			if group.Profile.Name == nil {
@@ -418,14 +436,14 @@ func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Reso
 
 			accountId, roleName, matchesRolePattern, err := parseAccountIDAndRoleFromGroupName(ctx, awsConfig.RoleRegex, *group.Profile.Name)
 			if err != nil {
-				return nil, nil, fmt.Errorf("okta-aws-connector: failed to parse account id and role from group name: %w", err)
+				return nil, respCtx.OktaResponse, fmt.Errorf("okta-aws-connector: failed to parse account id and role from group name: %w", err)
 			}
 			if !matchesRolePattern || accountId != resource.GetId().GetResource() {
 				continue
 			}
 			grant, err := o.accountGrantGroupExpandable(resource, roleName, *group.Id)
 			if err != nil {
-				return nil, nil, fmt.Errorf("okta-aws-connector: failed to create expandable group grant: %w", err)
+				return nil, respCtx.OktaResponse, fmt.Errorf("okta-aws-connector: failed to create expandable group grant: %w", err)
 			}
 			rv = append(rv, grant)
 		}
@@ -434,7 +452,11 @@ func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Reso
 
 	appGroups, respCtx, err := listApplicationGroupAssignmentsV5(ctx, o.connector.clientV5, o.connector.awsConfig.OktaAppId, token, page)
 	if err != nil {
-		return nil, nil, fmt.Errorf("okta-aws-connector: failed to list application groups: %w", err)
+		var oktaResp *oktav5.APIResponse
+		if respCtx != nil {
+			oktaResp = respCtx.OktaResponse
+		}
+		return nil, oktaResp, fmt.Errorf("okta-aws-connector: failed to list application groups: %w", err)
 	}
 
 	for _, appGroup := range appGroups {
@@ -445,7 +467,7 @@ func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Reso
 
 		appGroupSAMLRoles, err := appGroupSAMLRolesWrapperV5(ctx, appGroup)
 		if err != nil {
-			return nil, nil, fmt.Errorf("okta-aws-connector: failed to get saml roles for app group: %w", err)
+			return nil, respCtx.OktaResponse, fmt.Errorf("okta-aws-connector: failed to get saml roles for app group: %w", err)
 		}
 
 		// TODO(lauren) we only need this when !awsConfig.JoinAllRoles
@@ -457,7 +479,7 @@ func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Reso
 			} else {
 				grant, err := o.accountGrantGroupExpandable(resource, role, *appGroup.Id)
 				if err != nil {
-					return nil, nil, fmt.Errorf("okta-aws-connector: failed to create expandable group grant: %w", err)
+					return nil, respCtx.OktaResponse, fmt.Errorf("okta-aws-connector: failed to create expandable group grant: %w", err)
 				}
 				rv = append(rv, grant)
 			}
@@ -605,44 +627,49 @@ func getSAMLRoles(profile map[string]interface{}) ([]string, error) {
 	return ret, nil
 }
 
-func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Context, ss sessions.SessionStore, groupId string) (*OktaAppGroupWrapper, error) {
+func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Context, ss sessions.SessionStore, groupId string) (*OktaAppGroupWrapper, *responseContextV5, error) {
 	l := ctxzap.Extract(ctx)
 	awsConfig, err := o.connector.getAWSApplicationConfig(ctx, ss)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	appGroupSAMLRoles, err := awsConfig.getAppGroupFromCache(ctx, ss, groupId)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if appGroupSAMLRoles != nil {
 		l.Debug("okta-aws-connector: found group in cache", zap.String("groupId", groupId))
-		return appGroupSAMLRoles, nil
+		return appGroupSAMLRoles, nil, nil
 	}
 	notAnAppGroup, err := awsConfig.checkIfNotAppGroupFromCache(ctx, ss, groupId)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if notAnAppGroup {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	oktaAppGroup, resp, err := o.connector.clientV5.ApplicationGroupsAPI.GetApplicationGroupAssignment(ctx, o.connector.awsConfig.OktaAppId, groupId).
 		Execute()
 
+	// Always convert response to context to preserve rate limit information.
+	var reqCtx *responseContextV5
+	if resp != nil {
+		defer resp.Body.Close()
+		reqCtx, _ = responseToContextV5(&pagination.Token{}, resp)
+	}
+
 	if err != nil {
 		if resp == nil {
-			return nil, fmt.Errorf("okta-aws-connector: failed to fetch application group assignment: %w", err)
+			return nil, reqCtx, fmt.Errorf("okta-aws-connector: failed to fetch application group assignment: %w", err)
 		}
-
-		defer resp.Body.Close()
 		errOkta, err := getErrorV5(resp)
 		if err != nil {
-			return nil, err
+			return nil, reqCtx, err
 		}
 
 		if errOkta.ErrorCode == nil {
-			return nil, errors.New("okta-aws-connector: failed to fetch application group assignment with unknown error")
+			return nil, reqCtx, errors.New("okta-aws-connector: failed to fetch application group assignment with unknown error")
 		}
 
 		errorSummary := ""
@@ -652,22 +679,22 @@ func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Contex
 
 		if *errOkta.ErrorCode != ResourceNotFoundExceptionErrorCode {
 			l.Warn("okta-aws-connector: ", zap.String("ErrorCode", *errOkta.ErrorCode), zap.String("ErrorSummary", errorSummary))
-			return nil, fmt.Errorf("okta-aws-connector: %v", errOkta)
+			return nil, reqCtx, fmt.Errorf("okta-aws-connector: %v", errOkta)
 		}
 
 		_ = awsConfig.setNotAppGroupInCache(ctx, ss, groupId, true)
 
-		return nil, nil
+		return nil, reqCtx, nil
 	}
 
 	appGroupSAMLRoles, err = appGroupSAMLRolesWrapperV5(ctx, *oktaAppGroup)
 	if err != nil {
-		return nil, err
+		return nil, reqCtx, err
 	}
 
 	_ = awsConfig.setAppGroupInCache(ctx, ss, groupId, appGroupSAMLRoles)
 
-	return appGroupSAMLRoles, nil
+	return appGroupSAMLRoles, reqCtx, nil
 }
 
 type JSONPatchOperation struct {
@@ -1071,13 +1098,16 @@ func listGroupsHelperV5(ctx context.Context, client *oktav5.APIClient, token *pa
 		After(after).
 		Execute()
 
-	if err != nil {
-		return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch groups from okta: %w", handleOktaResponseErrorV5(resp, err))
+	var reqCtx *responseContextV5
+	if resp != nil {
+		defer resp.Body.Close()
+		reqCtx, _ = responseToContextV5(token, resp)
 	}
-	reqCtx, err := responseToContextV5(token, resp)
+
 	if err != nil {
-		return nil, nil, err
+		return nil, reqCtx, fmt.Errorf("okta-aws-connector: failed to fetch groups from okta: %w", handleOktaResponseErrorV5(resp, err))
 	}
+
 	return groups, reqCtx, nil
 }
 
@@ -1085,13 +1115,15 @@ func listUsersGroupsClientV5(ctx context.Context, client *oktav5.APIClient, user
 	// TODO(golds): should we paginate or exhaust?
 	users, resp, err := client.UserAPI.ListUserGroups(ctx, userId).
 		Execute()
-	if err != nil {
-		return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch group users from okta: %w", handleOktaResponseErrorV5(resp, err))
+
+	var reqCtx *responseContextV5
+	if resp != nil {
+		defer resp.Body.Close()
+		reqCtx, _ = responseToContextV5(&pagination.Token{}, resp)
 	}
 
-	reqCtx, err := responseToContextV5(&pagination.Token{}, resp)
 	if err != nil {
-		return nil, nil, err
+		return nil, reqCtx, fmt.Errorf("okta-aws-connector: failed to fetch group users from okta: %w", handleOktaResponseErrorV5(resp, err))
 	}
 
 	return users, reqCtx, nil
