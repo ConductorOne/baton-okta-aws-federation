@@ -7,6 +7,9 @@ import (
 	oktav5 "github.com/conductorone/okta-sdk-golang/v5/okta"
 
 	"github.com/conductorone/baton-sdk/pkg/pagination"
+
+	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
+	"go.uber.org/zap"
 )
 
 func listApplicationGroupAssignmentsV5(
@@ -21,7 +24,13 @@ func listApplicationGroupAssignmentsV5(
 		Limit(defaultLimit).
 		Execute()
 	if err != nil {
-		return nil, nil, fmt.Errorf("okta-connectorv2: failed to fetch app group assignments from okta: %w", handleOktaResponseErrorV5(resp, err))
+		l := ctxzap.Extract(ctx)
+		l.Debug("Got error from listApplicationGroupAssignmentsV5", zap.Error(err))
+
+		fullError := handleOktaResponseErrorWithRateLimitingV5(resp, err)
+
+		l.Debug("returning rate limit error", zap.Error(fullError))
+		return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch app group assignments from okta: %w", fullError)
 	}
 
 	reqCtx, err := responseToContextV5(token, resp)
@@ -38,7 +47,13 @@ func listApplicationUsersV5(ctx context.Context, client *oktav5.APIClient, appID
 		Limit(defaultLimit).
 		Execute()
 	if err != nil {
-		return nil, nil, fmt.Errorf("okta-connectorv2: failed to fetch app users from okta: %w", handleOktaResponseErrorV5(resp, err))
+		l := ctxzap.Extract(ctx)
+		l.Debug("Got error from listApplicationUsersV5", zap.Error(err))
+
+		fullError := handleOktaResponseErrorWithRateLimitingV5(resp, err)
+
+		l.Debug("returning rate limit error", zap.Error(fullError))
+		return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch app users from okta: %w", fullError)
 	}
 
 	reqCtx, err := responseToContextV5(token, resp)

@@ -513,6 +513,8 @@ Join all roles ON: Role1, Role2, RoleA, and RoleB are available upon login to AW
 */
 
 func (o *accountResourceType) listAWSSamlRoles(ctx context.Context) (*AWSRoles, *responseContextV5, error) {
+	l := ctxzap.Extract(ctx)
+	l.Info("at top of listAWSSamlRoles!")
 	apiPath := fmt.Sprintf(apiPathSamlRoles, o.connector.awsConfig.OktaAppId)
 
 	req, err := o.connector.clientV5.PrepareRequest(
@@ -553,6 +555,7 @@ func (o *accountResourceType) listAWSSamlRoles(ctx context.Context) (*AWSRoles, 
 		return nil, nil, err
 	}
 
+	l.Info("at end of listAWSSamlRoles!", zap.Error(err), zap.Any("aws_roles", awsRoles))
 	return &awsRoles, respCtx, nil
 }
 
@@ -657,7 +660,11 @@ func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Contex
 
 		_ = awsConfig.setNotAppGroupInCache(ctx, ss, groupId, true)
 
-		return nil, nil
+		l.Error("Got error from GetApplicationGroupAssignment", zap.Error(err))
+		fullError := handleOktaResponseErrorWithRateLimitingV5(resp, err)
+		l.Error("Returning rate limit error", zap.Error(fullError))
+
+		return nil, fullError
 	}
 
 	appGroupSAMLRoles, err = appGroupSAMLRolesWrapperV5(ctx, *oktaAppGroup)
@@ -831,7 +838,10 @@ func (o *accountResourceType) Grant(ctx context.Context, principal *v2.Resource,
 			return nil, fmt.Errorf("okta-aws-connector: error getting application group assignment after assignment: %w", err)
 		}
 
-		return addSamlRoleToAppGroup(ctx, o.connector.clientV5, appID, groupID, newSamlRole, appGroup)
+		annos, err := addSamlRoleToAppGroup(ctx, o.connector.clientV5, appID, groupID, newSamlRole, appGroup)
+		l := ctxzap.Extract(ctx)
+		l.Info("At botton of Grant relevant!", zap.Any("new_saml_role", newSamlRole), zap.Error(err))
+		return annos, err
 	default:
 		return nil, fmt.Errorf("okta-aws-connector: invalid grant resource type: %s", principal.Id.ResourceType)
 	}
@@ -1009,6 +1019,8 @@ func updateApplicationGroup(
 	groupID string,
 	samlRoles []string,
 ) (*oktav5.ApplicationGroupAssignment, error) {
+	l := ctxzap.Extract(ctx)
+	l.Info("At top of updateApplicationGroup!")
 	apiPath := fmt.Sprintf(apiPathApplicationGroup, appID, groupID)
 
 	payload := []JSONPatchOperation{
@@ -1051,6 +1063,8 @@ func updateApplicationGroup(
 		return nil, fmt.Errorf("okta-aws-connector: failed to decode response: %w", err)
 	}
 
+	l.Info("At botton of updateApplicationGroup!", zap.Error(err))
+
 	return &appGroup, nil
 }
 
@@ -1070,10 +1084,16 @@ func listGroupsHelperV5(ctx context.Context, client *oktav5.APIClient, token *pa
 		Limit(defaultLimit).
 		After(after).
 		Execute()
-
 	if err != nil {
-		return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch groups from okta: %w", handleOktaResponseErrorV5(resp, err))
+		l := ctxzap.Extract(ctx)
+		l.Debug("Got error from listGroupsHelperV5", zap.Error(err))
+
+		fullError := handleOktaResponseErrorWithRateLimitingV5(resp, err)
+
+		l.Debug("returning rate limit error", zap.Error(fullError))
+		return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch groups from okta: %w", fullError)
 	}
+
 	reqCtx, err := responseToContextV5(token, resp)
 	if err != nil {
 		return nil, nil, err
@@ -1086,7 +1106,13 @@ func listUsersGroupsClientV5(ctx context.Context, client *oktav5.APIClient, user
 	users, resp, err := client.UserAPI.ListUserGroups(ctx, userId).
 		Execute()
 	if err != nil {
-		return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch group users from okta: %w", handleOktaResponseErrorV5(resp, err))
+		l := ctxzap.Extract(ctx)
+		l.Debug("Got error from listUsersGroupsClientV5", zap.Error(err))
+
+		fullError := handleOktaResponseErrorWithRateLimitingV5(resp, err)
+
+		l.Debug("returning rate limit error", zap.Error(fullError))
+		return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch group users from okta: %w", fullError)
 	}
 
 	reqCtx, err := responseToContextV5(&pagination.Token{}, resp)

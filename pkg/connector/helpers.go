@@ -9,6 +9,7 @@ import (
 	"net/url"
 
 	"github.com/conductorone/baton-sdk/pkg/pagination"
+	"github.com/conductorone/baton-sdk/pkg/ratelimit"
 	oktav5 "github.com/conductorone/okta-sdk-golang/v5/okta"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -63,4 +64,18 @@ func handleOktaResponseErrorV5(resp *oktav5.APIResponse, err error) error {
 		return status.Error(codes.Unavailable, "server error")
 	}
 	return err
+}
+
+func handleOktaResponseErrorWithRateLimitingV5(resp *oktav5.APIResponse, err error) error {
+	fullError := handleOktaResponseErrorV5(resp, err)
+
+	if resp != nil {
+		if rateLimit, rlerr := ratelimit.ExtractRateLimitData(resp.StatusCode, &resp.Header); rlerr == nil {
+			newStatus := status.New(codes.Unavailable, fullError.Error())
+			newStatus, _ = newStatus.WithDetails(rateLimit) // Ignore any errors here.
+			fullError = newStatus.Err()
+		}
+	}
+
+	return fullError
 }
