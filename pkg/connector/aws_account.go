@@ -639,8 +639,8 @@ func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Contex
 		}
 
 		defer resp.Body.Close()
-		errOkta, err := getErrorV5(resp)
-		if err != nil {
+		errOkta, getErr := getErrorV5(resp)
+		if getErr != nil {
 			return nil, err
 		}
 
@@ -654,8 +654,12 @@ func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Contex
 		}
 
 		if *errOkta.ErrorCode != ResourceNotFoundExceptionErrorCode {
+			l.Error("Got *other* error from GetApplicationGroupAssignment", zap.Error(err))
+			fullError := handleOktaResponseErrorWithRateLimitingV5(resp, err)
+			l.Error("Returning rate limit error", zap.Error(fullError))
+
 			l.Warn("okta-aws-connector: ", zap.String("ErrorCode", *errOkta.ErrorCode), zap.String("ErrorSummary", errorSummary))
-			return nil, fmt.Errorf("okta-aws-connector: %v", errOkta)
+			return nil, fmt.Errorf("okta-aws-connector: %w", fullError)
 		}
 
 		_ = awsConfig.setNotAppGroupInCache(ctx, ss, groupId, true)
