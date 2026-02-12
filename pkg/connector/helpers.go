@@ -9,31 +9,19 @@ import (
 	"net/url"
 
 	"github.com/conductorone/baton-sdk/pkg/pagination"
-	"github.com/okta/okta-sdk-golang/v2/okta"
-	"github.com/okta/okta-sdk-golang/v2/okta/query"
+	oktav5 "github.com/conductorone/okta-sdk-golang/v5/okta"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 const ContentType = "application/json"
 
-type responseContext struct {
-	OktaResponse *okta.Response
+type responseContextV5 struct {
+	OktaResponse *oktav5.APIResponse
 }
 
-func queryParams(size int, after string) *query.Params {
-	if size == 0 || size > defaultLimit {
-		size = defaultLimit
-	}
-	if after == "" {
-		return query.NewQueryParams(query.WithLimit(int64(size)))
-	}
-
-	return query.NewQueryParams(query.WithLimit(int64(size)), query.WithAfter(after))
-}
-
-func responseToContext(token *pagination.Token, resp *okta.Response) (*responseContext, error) {
-	u, err := url.Parse(resp.NextPage)
+func responseToContextV5(token *pagination.Token, resp *oktav5.APIResponse) (*responseContextV5, error) {
+	u, err := url.Parse(resp.NextPage())
 	if err != nil {
 		return nil, err
 	}
@@ -41,27 +29,27 @@ func responseToContext(token *pagination.Token, resp *okta.Response) (*responseC
 	after := u.Query().Get("after")
 	token.Token = after
 
-	return &responseContext{
+	return &responseContextV5{
 		OktaResponse: resp,
 	}, nil
 }
 
-func getError(response *okta.Response) (okta.Error, error) {
-	var errOkta okta.Error
+func getErrorV5(response *oktav5.APIResponse) (oktav5.Error, error) {
+	var errOkta oktav5.Error
 	bytes, err := io.ReadAll(response.Body)
 	if err != nil {
-		return okta.Error{}, err
+		return oktav5.Error{}, err
 	}
 
 	err = json.Unmarshal(bytes, &errOkta)
 	if err != nil {
-		return okta.Error{}, err
+		return oktav5.Error{}, err
 	}
 
 	return errOkta, nil
 }
 
-func handleOktaResponseError(resp *okta.Response, err error) error {
+func handleOktaResponseErrorV5(resp *oktav5.APIResponse, err error) error {
 	var urlErr *url.Error
 	if errors.As(err, &urlErr) {
 		if urlErr.Timeout() {

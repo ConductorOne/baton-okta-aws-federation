@@ -16,7 +16,7 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/session"
 	"github.com/conductorone/baton-sdk/pkg/types/sessions"
 	"github.com/conductorone/baton-sdk/pkg/uhttp"
-	"github.com/okta/okta-sdk-golang/v2/okta"
+	oktav5 "github.com/conductorone/okta-sdk-golang/v5/okta"
 
 	cfg "github.com/conductorone/baton-okta-aws-federation/pkg/config"
 )
@@ -35,7 +35,7 @@ var (
 )
 
 type Okta struct {
-	client    *okta.Client
+	clientV5  *oktav5.APIClient
 	domain    string
 	apiToken  string
 	awsConfig *awsConfig
@@ -202,12 +202,12 @@ func (c *Okta) Validate(ctx context.Context) (annotations.Annotations, error) {
 
 	token := newPaginationToken(defaultLimit, "")
 
-	_, respCtx, err := getOrgSettings(ctx, c.client, token)
+	_, respCtx, err := getOrgSettings(ctx, c.clientV5, token)
 	if err != nil {
 		return nil, fmt.Errorf("okta-connector: verify failed to fetch org: %w", err)
 	}
 
-	_, _, err = parseResp(respCtx.OktaResponse)
+	_, _, err = parseRespV5(respCtx.OktaResponse)
 	if err != nil {
 		return nil, fmt.Errorf("okta-connector: verify failed to parse response: %w", err)
 	}
@@ -239,7 +239,7 @@ func safeCacheInt32(val int) (int32, error) {
 
 func New(ctx context.Context, cc *cfg.OktaAwsFederation, opts *cli.ConnectorOpts) (connectorbuilder.ConnectorBuilderV2, []connectorbuilder.Opt, error) {
 	var (
-		oktaClient *okta.Client
+		oktaClientV5 *oktav5.APIClient
 	)
 	client, err := uhttp.NewClient(ctx, uhttp.WithLogger(true, nil))
 	if err != nil {
@@ -257,17 +257,19 @@ func New(ctx context.Context, cc *cfg.OktaAwsFederation, opts *cli.ConnectorOpts
 	}
 
 	if cc.ApiToken != "" && cc.Domain != "" {
-		_, oktaClient, err = okta.NewClient(ctx,
-			okta.WithOrgUrl(fmt.Sprintf("https://%s", cc.Domain)),
-			okta.WithToken(cc.ApiToken),
-			okta.WithHttpClientPtr(client),
-			okta.WithCache(cc.Cache),
-			okta.WithCacheTti(cacheTTI),
-			okta.WithCacheTtl(cacheTTL),
+		config, err := oktav5.NewConfiguration(
+			oktav5.WithOrgUrl(fmt.Sprintf("https://%s", cc.Domain)),
+			oktav5.WithToken(cc.ApiToken),
+			oktav5.WithHttpClientPtr(client),
+			oktav5.WithCache(cc.Cache),
+			oktav5.WithCacheTti(cacheTTI),
+			oktav5.WithCacheTtl(cacheTTL),
+			oktav5.WithRateLimitPrevent(true),
 		)
 		if err != nil {
 			return nil, nil, err
 		}
+		oktaClientV5 = oktav5.NewAPIClient(config)
 	}
 
 	awsConfig := &awsConfig{
@@ -276,9 +278,9 @@ func New(ctx context.Context, cc *cfg.OktaAwsFederation, opts *cli.ConnectorOpts
 	}
 
 	return &Okta{
-		client:    oktaClient,
 		domain:    cc.Domain,
 		apiToken:  cc.ApiToken,
+		clientV5:  oktaClientV5,
 		awsConfig: awsConfig,
 	}, nil, nil
 }
@@ -300,11 +302,11 @@ func (c *Okta) getAWSApplicationConfig(ctx context.Context, ss sessions.SessionS
 		return nil, fmt.Errorf("okta-connector: no app id set")
 	}
 
-	app, awsAppResp, err := c.client.Application.GetApplication(ctx, c.awsConfig.OktaAppId, okta.NewApplication(), nil)
+	app, resp, err := c.clientV5.ApplicationAPI.GetApplication(ctx, c.awsConfig.OktaAppId).Execute()
 	if err != nil {
 		return nil, fmt.Errorf("okta-aws-connector: verify failed to fetch aws app: %w", err)
 	}
-	awsAppRespCtx, err := responseToContext(&pagination.Token{}, awsAppResp)
+	awsAppRespCtx, err := responseToContextV5(&pagination.Token{}, resp)
 	if err != nil {
 		return nil, fmt.Errorf("okta-aws-connector: verify failed to convert get aws app response: %w", err)
 	}
@@ -312,12 +314,17 @@ func (c *Okta) getAWSApplicationConfig(ctx context.Context, ss sessions.SessionS
 		err := fmt.Errorf("okta-connector: verify returned non-200 for aws app: '%d'", awsAppRespCtx.OktaResponse.StatusCode)
 		return nil, err
 	}
-	oktaApp, err := oktaAppToOktaApplication(ctx, app)
-	if err != nil {
-		return nil, fmt.Errorf("okta-connector: verify failed to convert aws app: %w", err)
+
+	appInstance := app.GetActualInstance()
+	oktaApp, ok := appInstance.(*oktav5.SamlApplication)
+	if !ok {
+		if appInstance == nil {
+			return nil, fmt.Errorf("okta-aws-connector: error getting actual instance of okta app")
+		}
+		return nil, fmt.Errorf("okta-aws-connector: error getting actual instance of okta app: unexpected type %T", appInstance)
 	}
-	if !strings.Contains(oktaApp.Name, "aws") {
-		return nil, fmt.Errorf("okta-aws-connector: okta app '%s' is not an aws app", oktaApp.Name)
+	if !strings.Contains(*oktaApp.Name, "aws") {
+		return nil, fmt.Errorf("okta-aws-connector: okta app '%s' is not an aws app", *oktaApp.Name)
 	}
 	if oktaApp.Settings == nil {
 		return nil, fmt.Errorf("okta-aws-connector: settings are not present on okta app")
@@ -326,7 +333,7 @@ func (c *Okta) getAWSApplicationConfig(ctx context.Context, ss sessions.SessionS
 		return nil, fmt.Errorf("okta-aws-connector: app settings are not present on okta app")
 	}
 	appSettings := *oktaApp.Settings.App
-	useGroupMapping, ok := appSettings["useGroupMapping"]
+	useGroupMapping, ok := appSettings.AdditionalProperties["useGroupMapping"]
 	if !ok {
 		return nil, fmt.Errorf("okta-connector: 'useGroupMapping' app setting is not present on okta app settings")
 	}
@@ -334,7 +341,7 @@ func (c *Okta) getAWSApplicationConfig(ctx context.Context, ss sessions.SessionS
 	if !ok {
 		return nil, fmt.Errorf("okta-connector: 'useGroupMapping' app setting is not boolean")
 	}
-	groupFilter, ok := appSettings["groupFilter"]
+	groupFilter, ok := appSettings.AdditionalProperties["groupFilter"]
 	if !ok {
 		return nil, fmt.Errorf("okta-connector: 'groupFilter' app setting is not present on okta app settings")
 	}
@@ -342,7 +349,7 @@ func (c *Okta) getAWSApplicationConfig(ctx context.Context, ss sessions.SessionS
 	if !ok {
 		return nil, fmt.Errorf("okta-connector: 'groupFilter' app setting is not string")
 	}
-	joinAllRoles, ok := appSettings["joinAllRoles"]
+	joinAllRoles, ok := appSettings.AdditionalProperties["joinAllRoles"]
 	if !ok {
 		return nil, fmt.Errorf("okta-connector: 'joinAllRoles' app setting is not present on okta app settings")
 	}
@@ -350,7 +357,7 @@ func (c *Okta) getAWSApplicationConfig(ctx context.Context, ss sessions.SessionS
 	if !ok {
 		return nil, fmt.Errorf("okta-connector: 'joinAllRoles' app setting is not boolean")
 	}
-	identityProviderArn, ok := appSettings["identityProviderArn"]
+	identityProviderArn, ok := appSettings.AdditionalProperties["identityProviderArn"]
 	if !ok {
 		return nil, fmt.Errorf("okta-connector: 'identityProviderArn' app setting is not present on okta app settings")
 	}
@@ -371,7 +378,7 @@ func (c *Okta) getAWSApplicationConfig(ctx context.Context, ss sessions.SessionS
 		return nil, err
 	}
 
-	samlRolesUnionEnabled, err := isSamlRolesUnionEnabled(ctx, c.client, c.awsConfig.OktaAppId)
+	samlRolesUnionEnabled, err := isSamlRolesUnionEnabled(ctx, c.clientV5, c.awsConfig.OktaAppId)
 	if err != nil {
 		return nil, err
 	}
@@ -405,34 +412,42 @@ type AppUserSchema struct {
 	} `json:"definitions"`
 }
 
-func getDefaultAppUserSchema(ctx context.Context, client *okta.Client, appId string) (*AppUserSchema, error) {
-	url := fmt.Sprintf(apiPathDefaultAppSchema, appId)
-	rq := client.CloneRequestExecutor()
-	req, err := rq.
-		WithAccept(ContentType).
-		WithContentType(ContentType).
-		NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	var appUserSchema *AppUserSchema
-	_, err = rq.Do(ctx, req, &appUserSchema)
+func getDefaultAppUserSchema(ctx context.Context, client *oktav5.APIClient, appId string) (*oktav5.UserSchema, error) {
+	schema, _, err := client.SchemaAPI.GetApplicationUserSchema(ctx, appId).Execute()
 	if err != nil {
 		return nil, fmt.Errorf("okta-aws-connector: error fetching default application schema: %w", err)
 	}
-	return appUserSchema, nil
+
+	return schema, nil
 }
 
-func isSamlRolesUnionEnabled(ctx context.Context, client *okta.Client, appId string) (bool, error) {
+func isSamlRolesUnionEnabled(ctx context.Context, client *oktav5.APIClient, appId string) (bool, error) {
 	defaultAppSchema, err := getDefaultAppUserSchema(ctx, client, appId)
 	if err != nil {
 		return false, err
 	}
-	if defaultAppSchema.Definitions.Base.Properties.SamlRoles.Union == "ENABLE" {
-		return true, nil
+
+	samlRoles, ok := defaultAppSchema.Definitions.Base.Properties.AdditionalProperties["samlRoles"]
+	if !ok {
+		return false, nil
 	}
-	return false, nil
+
+	samlRolesMap, ok := samlRoles.(map[string]interface{})
+	if !ok {
+		return false, fmt.Errorf("okta-aws-connector: samlRoles is not a map[string]interface{}")
+	}
+
+	unionValue, ok := samlRolesMap["union"]
+	if !ok {
+		return false, nil
+	}
+
+	unionString, ok := unionValue.(string)
+	if !ok {
+		return false, fmt.Errorf("okta-aws-connector: union value is not a string")
+	}
+
+	return unionString == "ENABLE", nil
 }
 
 func (a *oktaAWSAppSettings) getAppGroupFromCache(ctx context.Context, ss sessions.SessionStore, groupId string) (*OktaAppGroupWrapper, error) {
@@ -467,8 +482,8 @@ func (a *oktaAWSAppSettings) setNotAppGroupInCache(ctx context.Context, ss sessi
 	return session.SetJSON(ctx, ss, groupId, value, notAppGroupPrefix)
 }
 
-func appGroupSAMLRolesWrapper(ctx context.Context, appGroup *okta.ApplicationGroupAssignment) (*OktaAppGroupWrapper, error) {
-	samlRoles, err := getSAMLRolesFromAppGroupProfile(ctx, appGroup)
+func appGroupSAMLRolesWrapperV5(ctx context.Context, appGroup oktav5.ApplicationGroupAssignment) (*OktaAppGroupWrapper, error) {
+	samlRoles, err := getSAMLRolesFromAppGroupProfileV5(ctx, appGroup)
 	if err != nil {
 		return nil, err
 	}
@@ -485,13 +500,14 @@ func accountIdFromARN(input string) (string, error) {
 	return parsedArn.AccountID, nil
 }
 
-func getOrgSettings(ctx context.Context, client *okta.Client, token *pagination.Token) (*okta.OrgSetting, *responseContext, error) {
-	orgSettings, resp, err := client.OrgSetting.GetOrgSettings(ctx)
+// TODO: cleanup pagination token
+func getOrgSettings(ctx context.Context, client *oktav5.APIClient, token *pagination.Token) (*oktav5.OrgSetting, *responseContextV5, error) {
+	orgSettings, resp, err := client.OrgSettingAPI.GetOrgSettings(ctx).Execute()
 	if err != nil {
-		return nil, nil, handleOktaResponseError(resp, err)
+		return nil, nil, handleOktaResponseErrorV5(resp, err)
 	}
 
-	respCtx, err := responseToContext(token, resp)
+	respCtx, err := responseToContextV5(token, resp)
 	if err != nil {
 		return nil, nil, err
 	}
