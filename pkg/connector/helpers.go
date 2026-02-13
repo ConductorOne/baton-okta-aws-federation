@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 
 	"github.com/conductorone/baton-sdk/pkg/pagination"
@@ -70,7 +71,26 @@ func handleOktaResponseErrorWithRateLimitingV5(resp *oktav5.APIResponse, err err
 	fullError := handleOktaResponseErrorV5(resp, err)
 
 	if resp != nil && fullError != nil {
-		return uhttp.WrapErrorsWithRateLimitInfo(codes.Unavailable, resp.Response, fullError)
+		code := codes.Unknown
+		switch resp.StatusCode {
+		case http.StatusNotFound:
+			code = codes.NotFound
+		case http.StatusUnauthorized:
+			code = codes.Unauthenticated
+		case http.StatusForbidden:
+			code = codes.PermissionDenied
+		case http.StatusConflict:
+			code = codes.AlreadyExists
+		case http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+			code = codes.Unavailable
+		case http.StatusRequestTimeout:
+			code = codes.DeadlineExceeded
+		default:
+			if resp.StatusCode >= http.StatusInternalServerError {
+				code = codes.Unavailable // Transient - retry
+			}
+		}
+		return uhttp.WrapErrorsWithRateLimitInfo(code, resp.Response, fullError)
 	}
 
 	return fullError
