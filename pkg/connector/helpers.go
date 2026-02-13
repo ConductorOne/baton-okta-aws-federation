@@ -8,10 +8,14 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"time"
 
+	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
 	"github.com/conductorone/baton-sdk/pkg/uhttp"
 	oktav5 "github.com/conductorone/okta-sdk-golang/v5/okta"
+	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
+	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -51,7 +55,7 @@ func getErrorV5(response *oktav5.APIResponse) (oktav5.Error, error) {
 	return errOkta, nil
 }
 
-func handleOktaResponseErrorV5(resp *oktav5.APIResponse, err error) error {
+func handleOktaResponseErrorV5(ctx context.Context, resp *oktav5.APIResponse, err error) error {
 	var urlErr *url.Error
 	if errors.As(err, &urlErr) {
 		if urlErr.Timeout() {
@@ -67,10 +71,11 @@ func handleOktaResponseErrorV5(resp *oktav5.APIResponse, err error) error {
 	return err
 }
 
-func handleOktaResponseErrorWithRateLimitingV5(resp *oktav5.APIResponse, err error) error {
-	fullError := handleOktaResponseErrorV5(resp, err)
+func handleOktaResponseErrorWithRateLimitingV5(ctx context.Context, resp *oktav5.APIResponse, err error) error {
+	l := ctxzap.Extract(ctx)
+	fullError := handleOktaResponseErrorV5(ctx, resp, err)
 
-	if resp != nil && fullError != nil {
+	if resp != nil && resp.Response != nil && fullError != nil {
 		code := codes.Unknown
 		switch resp.StatusCode {
 		case http.StatusNotFound:
@@ -90,7 +95,40 @@ func handleOktaResponseErrorWithRateLimitingV5(resp *oktav5.APIResponse, err err
 				code = codes.Unavailable // Transient - retry
 			}
 		}
-		return uhttp.WrapErrorsWithRateLimitInfo(code, resp.Response, fullError)
+
+		// Log rate limit headers to debug
+		if resp.StatusCode == http.StatusTooManyRequests {
+			l.Debug("Got 429 response",
+				zap.String("x-rate-limit-limit", resp.Response.Header.Get("X-Rate-Limit-Limit")),
+				zap.String("x-rate-limit-remaining", resp.Response.Header.Get("X-Rate-Limit-Remaining")),
+				zap.String("x-rate-limit-reset", resp.Response.Header.Get("X-Rate-Limit-Reset")))
+		}
+
+		wrappedErr := uhttp.WrapErrorsWithRateLimitInfo(code, resp.Response)
+
+		// Log what we're returning
+		if resp.StatusCode == http.StatusTooManyRequests {
+			if st, ok := status.FromError(wrappedErr); ok {
+				l.Debug("Status extracted successfully in handleOktaResponseErrorWithRateLimitingV5",
+					zap.Int("details_count", len(st.Details())))
+				for i, detail := range st.Details() {
+					if rlData, ok := detail.(*v2.RateLimitDescription); ok {
+						resetAt := rlData.GetResetAt().AsTime()
+						waitDuration := time.Until(resetAt)
+						l.Debug("RateLimitDescription in handleOktaResponseErrorWithRateLimitingV5",
+							zap.Int("index", i),
+							zap.Int64("limit", rlData.GetLimit()),
+							zap.Int64("remaining", rlData.GetRemaining()),
+							zap.Time("reset_at", resetAt),
+							zap.Duration("wait_duration", waitDuration))
+					}
+				}
+			} else {
+				l.Debug("Failed to extract status from error in handleOktaResponseErrorWithRateLimitingV5")
+			}
+		}
+
+		return wrappedErr
 	}
 
 	return fullError

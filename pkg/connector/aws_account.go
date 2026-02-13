@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	oktav5 "github.com/conductorone/okta-sdk-golang/v5/okta"
 
@@ -24,6 +25,8 @@ import (
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type OktaAppGroupWrapper struct {
@@ -281,6 +284,28 @@ func (o *accountResourceType) Grants(
 		rv, oktaResp, err = o.groupGrants(ctx, resource, attrs, page)
 	}
 	if err != nil {
+		// Debug logging at Grants() level to see if rate limit data is preserved
+		l := ctxzap.Extract(ctx)
+		if st, ok := status.FromError(err); ok {
+			if st.Code() == codes.Unavailable {
+				l.Debug("Got Unavailable error in Grants()",
+					zap.Int("details_count", len(st.Details())))
+				for i, detail := range st.Details() {
+					if rlData, ok := detail.(*v2.RateLimitDescription); ok {
+						resetAt := rlData.GetResetAt().AsTime()
+						waitDuration := time.Until(resetAt)
+						l.Debug("RateLimitDescription in Grants()",
+							zap.Int("index", i),
+							zap.Int64("limit", rlData.GetLimit()),
+							zap.Int64("remaining", rlData.GetRemaining()),
+							zap.Time("reset_at", resetAt),
+							zap.Duration("wait_duration", waitDuration))
+					}
+				}
+			}
+		} else {
+			l.Debug("Failed to extract status from error in Grants()", zap.Error(err))
+		}
 		return nil, nil, err
 	}
 
@@ -657,7 +682,7 @@ func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Contex
 
 		if *errOkta.ErrorCode != ResourceNotFoundExceptionErrorCode {
 			l.Error("Got *other* error from GetApplicationGroupAssignment", zap.Error(err))
-			fullError := handleOktaResponseErrorWithRateLimitingV5(resp, err)
+			fullError := handleOktaResponseErrorWithRateLimitingV5(ctx, resp, err)
 			l.Error("Returning rate limit error", zap.Error(fullError))
 
 			l.Warn("okta-aws-connector: ", zap.String("ErrorCode", *errOkta.ErrorCode), zap.String("ErrorSummary", errorSummary))
@@ -1090,7 +1115,7 @@ func listGroupsHelperV5(ctx context.Context, client *oktav5.APIClient, token *pa
 		l := ctxzap.Extract(ctx)
 		l.Debug("Got error from listGroupsHelperV5", zap.Error(err))
 
-		fullError := handleOktaResponseErrorWithRateLimitingV5(resp, err)
+		fullError := handleOktaResponseErrorWithRateLimitingV5(ctx, resp, err)
 
 		l.Debug("returning rate limit error", zap.Error(fullError))
 		return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch groups from okta: %w", fullError)
@@ -1120,7 +1145,7 @@ func listUsersGroupsClientV5(ctx context.Context, client *oktav5.APIClient, user
 
 		if err != nil {
 			l.Debug("Got error from listUsersGroupsClientV5", zap.Error(err))
-			fullError := handleOktaResponseErrorWithRateLimitingV5(resp, err)
+			fullError := handleOktaResponseErrorWithRateLimitingV5(ctx, resp, err)
 			l.Debug("returning rate limit error", zap.Error(fullError))
 			return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch group users from okta: %w", fullError)
 		}

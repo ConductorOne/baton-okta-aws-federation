@@ -27,7 +27,7 @@ func listApplicationGroupAssignmentsV5(
 		l := ctxzap.Extract(ctx)
 		l.Debug("Got error from listApplicationGroupAssignmentsV5", zap.Error(err))
 
-		fullError := handleOktaResponseErrorWithRateLimitingV5(resp, err)
+		fullError := handleOktaResponseErrorWithRateLimitingV5(ctx, resp, err)
 
 		l.Debug("returning rate limit error", zap.Error(fullError))
 		return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch app group assignments from okta: %w", fullError)
@@ -50,7 +50,7 @@ func listApplicationUsersV5(ctx context.Context, client *oktav5.APIClient, appID
 		l := ctxzap.Extract(ctx)
 		l.Debug("Got error from listApplicationUsersV5", zap.Error(err))
 
-		fullError := handleOktaResponseErrorWithRateLimitingV5(resp, err)
+		fullError := handleOktaResponseErrorWithRateLimitingV5(ctx, resp, err)
 
 		l.Debug("returning rate limit error", zap.Error(fullError))
 		return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch app users from okta: %w", fullError)

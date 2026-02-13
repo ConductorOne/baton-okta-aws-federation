@@ -504,7 +504,7 @@ func accountIdFromARN(input string) (string, error) {
 func getOrgSettings(ctx context.Context, client *oktav5.APIClient, token *pagination.Token) (*oktav5.OrgSetting, *responseContextV5, error) {
 	orgSettings, resp, err := client.OrgSettingAPI.GetOrgSettings(ctx).Execute()
 	if err != nil {
-		return nil, nil, handleOktaResponseErrorV5(resp, err)
+		return nil, nil, handleOktaResponseErrorV5(ctx, resp, err)
 	}
 
 	respCtx, err := responseToContextV5(token, resp)
