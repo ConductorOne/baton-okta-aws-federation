@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"slices"
 	"strings"
@@ -320,12 +321,18 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 	}
 
 	for _, appUser := range appUsers {
-		appUserSAMLRolesMap := mapset.NewSet[string]()
+		// Check required fields first before processing anything
+		if appUser.Id == nil {
+			l.Warn("okta-aws-connector: app user id was nil")
+			continue
+		}
 
 		if appUser.Scope == nil {
 			l.Warn("okta-aws-connector: app user scope was nil", zap.Any("userId", appUser.Id))
 			continue
 		}
+
+		appUserSAMLRolesMap := mapset.NewSet[string]()
 
 		// For users with direct assignments or with Union enabled, we extract samlRoles from their profile
 		if *appUser.Scope == appUserScope || (*appUser.Scope == appGroupScope && awsConfig.SamlRolesUnionEnabled) {
@@ -334,11 +341,6 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 				return nil, nil, fmt.Errorf("okta-aws-connector: failed to get saml roles for user '%v': %w", appUser.Id, err)
 			}
 			appUserSAMLRolesMap.Append(appUserSAMLRoles...)
-		}
-
-		if appUser.Id == nil {
-			l.Warn("okta-aws-connector: app user id was nil", zap.Any("userId", appUser.Id))
-			continue
 		}
 
 		// For group-scoped users (no direct assignment) and when Union/JoinAllRoles is disabled,
@@ -662,13 +664,9 @@ func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Contex
 			return nil, fmt.Errorf("okta-aws-connector: %w", fullError)
 		}
 
+		// 404 means group is not assigned to the app - this is not an error, just no grant
 		_ = awsConfig.setNotAppGroupInCache(ctx, ss, groupId, true)
-
-		l.Error("Got error from GetApplicationGroupAssignment", zap.Error(err))
-		fullError := handleOktaResponseErrorWithRateLimitingV5(resp, err)
-		l.Error("Returning rate limit error", zap.Error(fullError))
-
-		return nil, fullError
+		return nil, nil
 	}
 
 	appGroupSAMLRoles, err = appGroupSAMLRolesWrapperV5(ctx, *oktaAppGroup)
@@ -1106,25 +1104,57 @@ func listGroupsHelperV5(ctx context.Context, client *oktav5.APIClient, token *pa
 }
 
 func listUsersGroupsClientV5(ctx context.Context, client *oktav5.APIClient, userId string) ([]oktav5.Group, *responseContextV5, error) {
-	// TODO(golds): should we paginate or exhaust?
-	users, resp, err := client.UserAPI.ListUserGroups(ctx, userId).
-		Execute()
-	if err != nil {
-		l := ctxzap.Extract(ctx)
-		l.Debug("Got error from listUsersGroupsClientV5", zap.Error(err))
+	l := ctxzap.Extract(ctx)
 
-		fullError := handleOktaResponseErrorWithRateLimitingV5(resp, err)
+	var allGroups []oktav5.Group
+	var lastResp *oktav5.APIResponse
+	after := ""
 
-		l.Debug("returning rate limit error", zap.Error(fullError))
-		return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch group users from okta: %w", fullError)
+	// Exhaust all pages like v2 SDK did automatically
+	for {
+		groups, resp, err := client.UserAPI.ListUserGroups(ctx, userId).
+			After(after).
+			Execute()
+
+		lastResp = resp
+
+		if err != nil {
+			l.Debug("Got error from listUsersGroupsClientV5", zap.Error(err))
+			fullError := handleOktaResponseErrorWithRateLimitingV5(resp, err)
+			l.Debug("returning rate limit error", zap.Error(fullError))
+			return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch group users from okta: %w", fullError)
+		}
+
+		allGroups = append(allGroups, groups...)
+
+		// Check if there are more pages
+		if !resp.HasNextPage() {
+			break
+		}
+
+		// Get next page token
+		nextPageURL := resp.NextPage()
+		if nextPageURL == "" {
+			break
+		}
+
+		// Parse after parameter from next page URL
+		u, err := url.Parse(nextPageURL)
+		if err != nil {
+			return nil, nil, fmt.Errorf("okta-aws-connector: failed to parse next page URL: %w", err)
+		}
+		after = u.Query().Get("after")
+		if after == "" {
+			break
+		}
 	}
 
-	reqCtx, err := responseToContextV5(&pagination.Token{}, resp)
+	reqCtx, err := responseToContextV5(&pagination.Token{}, lastResp)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return users, reqCtx, nil
+	return allGroups, reqCtx, nil
 }
 
 /*
