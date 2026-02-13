@@ -250,7 +250,12 @@ func (o *accountResourceType) Grants(
 	resource *v2.Resource,
 	attrs resource2.SyncOpAttrs,
 ) ([]*v2.Grant, *resource2.SyncOpResults, error) {
+	l := ctxzap.Extract(ctx)
 	token := &attrs.PageToken
+	l.Info("Grants() called",
+		zap.String("resource_id", resource.GetId().GetResource()),
+		zap.String("page_token", token.Token))
+
 	awsConfig, err := o.connector.getAWSApplicationConfig(ctx, attrs.Session)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error getting aws app settings config")
@@ -274,6 +279,10 @@ func (o *accountResourceType) Grants(
 
 	var rv []*v2.Grant
 	var oktaResp *oktav5.APIResponse
+
+	l.Info("Processing grants",
+		zap.String("resource_type", bag.ResourceTypeID()),
+		zap.String("page", page))
 
 	switch bag.ResourceTypeID() {
 	case resourceTypeUser.Id:
@@ -323,6 +332,11 @@ func (o *accountResourceType) Grants(
 	if err != nil {
 		return nil, nil, err
 	}
+
+	l.Info("Grants() returning successfully",
+		zap.Int("grants_count", len(rv)),
+		zap.String("next_page_token", pageToken))
+
 	return rv, &resource2.SyncOpResults{
 		NextPageToken: pageToken,
 		Annotations:   annos,
@@ -331,6 +345,7 @@ func (o *accountResourceType) Grants(
 
 func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resource, attrs resource2.SyncOpAttrs, page string) ([]*v2.Grant, *oktav5.APIResponse, error) {
 	l := ctxzap.Extract(ctx)
+	l.Info("userGrants() called", zap.String("page", page))
 	token := &attrs.PageToken
 
 	awsConfig, err := o.connector.getAWSApplicationConfig(ctx, attrs.Session)
@@ -382,6 +397,7 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 		}
 	}
 
+	l.Info("userGrants() returning", zap.Int("grants_count", len(rv)))
 	return rv, respContext.OktaResponse, nil
 }
 
@@ -419,6 +435,7 @@ func (o *accountResourceType) collectRolesFromUserGroups(
 
 func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Resource, attrs resource2.SyncOpAttrs, page string) ([]*v2.Grant, *oktav5.APIResponse, error) {
 	l := ctxzap.Extract(ctx)
+	l.Info("groupGrants() called", zap.String("page", page))
 	token := &attrs.PageToken
 
 	awsConfig, err := o.connector.getAWSApplicationConfig(ctx, attrs.Session)
@@ -490,6 +507,7 @@ func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Reso
 			}
 		}
 	}
+	l.Info("groupGrants() returning", zap.Int("grants_count", len(rv)))
 	return rv, respCtx.OktaResponse, err
 }
 
@@ -637,16 +655,18 @@ func getSAMLRoles(profile map[string]interface{}) ([]string, error) {
 
 func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Context, ss sessions.SessionStore, groupId string) (*OktaAppGroupWrapper, error) {
 	l := ctxzap.Extract(ctx)
+	l.Debug("Checking app group assignment", zap.String("groupId", groupId))
 	awsConfig, err := o.connector.getAWSApplicationConfig(ctx, ss)
 	if err != nil {
 		return nil, err
 	}
 	appGroupSAMLRoles, err := awsConfig.getAppGroupFromCache(ctx, ss, groupId)
 	if err != nil {
+		l.Debug("Cache read error for app-group", zap.String("groupId", groupId), zap.Error(err))
 		return nil, err
 	}
 	if appGroupSAMLRoles != nil {
-		l.Debug("okta-aws-connector: found group in cache", zap.String("groupId", groupId))
+		l.Info("App-group cache HIT - skipping API call", zap.String("groupId", groupId))
 		return appGroupSAMLRoles, nil
 	}
 	notAnAppGroup, err := awsConfig.checkIfNotAppGroupFromCache(ctx, ss, groupId)
@@ -654,9 +674,11 @@ func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Contex
 		return nil, err
 	}
 	if notAnAppGroup {
+		l.Info("Not-app-group cache HIT - skipping API call", zap.String("groupId", groupId))
 		return nil, nil
 	}
 
+	l.Debug("Making API call to check app group assignment", zap.String("groupId", groupId))
 	oktaAppGroup, resp, err := o.connector.clientV5.ApplicationGroupsAPI.GetApplicationGroupAssignment(ctx, o.connector.awsConfig.OktaAppId, groupId).
 		Execute()
 
@@ -690,7 +712,11 @@ func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Contex
 		}
 
 		// 404 means group is not assigned to the app - this is not an error, just no grant
-		_ = awsConfig.setNotAppGroupInCache(ctx, ss, groupId, true)
+		if cacheErr := awsConfig.setNotAppGroupInCache(ctx, ss, groupId, true); cacheErr != nil {
+			l.Warn("Failed to cache not-app-group", zap.String("groupId", groupId), zap.Error(cacheErr))
+		} else {
+			l.Warn("Cached not-app-group", zap.String("groupId", groupId))
+		}
 		return nil, nil
 	}
 
@@ -699,7 +725,11 @@ func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Contex
 		return nil, err
 	}
 
-	_ = awsConfig.setAppGroupInCache(ctx, ss, groupId, appGroupSAMLRoles)
+	if cacheErr := awsConfig.setAppGroupInCache(ctx, ss, groupId, appGroupSAMLRoles); cacheErr != nil {
+		l.Warn("Failed to cache app group", zap.String("groupId", groupId), zap.Error(cacheErr))
+	} else {
+		l.Info("Cached app-group after API call", zap.String("groupId", groupId))
+	}
 
 	return appGroupSAMLRoles, nil
 }

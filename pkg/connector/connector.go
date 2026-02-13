@@ -17,6 +17,8 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/types/sessions"
 	"github.com/conductorone/baton-sdk/pkg/uhttp"
 	oktav5 "github.com/conductorone/okta-sdk-golang/v5/okta"
+	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
+	"go.uber.org/zap"
 
 	cfg "github.com/conductorone/baton-okta-aws-federation/pkg/config"
 )
@@ -451,35 +453,57 @@ func isSamlRolesUnionEnabled(ctx context.Context, client *oktav5.APIClient, appI
 }
 
 func (a *oktaAWSAppSettings) getAppGroupFromCache(ctx context.Context, ss sessions.SessionStore, groupId string) (*OktaAppGroupWrapper, error) {
+	l := ctxzap.Extract(ctx)
 	cachedAppGroup, found, err := session.GetJSON[[]string](ctx, ss, groupId, appGroupPrefix)
 	if err != nil {
+		l.Debug("Error reading app-group from cache", zap.String("groupId", groupId), zap.Error(err))
 		return nil, err
 	} else if !found {
+		l.Debug("App-group not found in cache", zap.String("groupId", groupId))
 		return nil, nil
 	}
 
+	l.Debug("App-group found in cache", zap.String("groupId", groupId), zap.Int("saml_roles_count", len(cachedAppGroup)))
 	return &OktaAppGroupWrapper{
 		samlRoles: cachedAppGroup,
 	}, nil
 }
 
 func (a *oktaAWSAppSettings) setAppGroupInCache(ctx context.Context, ss sessions.SessionStore, groupId string, wrapper *OktaAppGroupWrapper) error {
-	return session.SetJSON(ctx, ss, groupId, wrapper.samlRoles, appGroupPrefix)
+	l := ctxzap.Extract(ctx)
+	err := session.SetJSON(ctx, ss, groupId, wrapper.samlRoles, appGroupPrefix)
+	if err != nil {
+		l.Debug("Error setting app-group in cache", zap.String("groupId", groupId), zap.Int("saml_roles_count", len(wrapper.samlRoles)), zap.Error(err))
+	} else {
+		l.Debug("Set app-group in cache", zap.String("groupId", groupId), zap.Int("saml_roles_count", len(wrapper.samlRoles)))
+	}
+	return err
 }
 
 func (a *oktaAWSAppSettings) checkIfNotAppGroupFromCache(ctx context.Context, ss sessions.SessionStore, groupId string) (bool, error) {
+	l := ctxzap.Extract(ctx)
 	notAppGroup, found, err := session.GetJSON[bool](ctx, ss, groupId, notAppGroupPrefix)
 	if err != nil {
+		l.Debug("Error reading not-app-group from cache", zap.String("groupId", groupId), zap.Error(err))
 		return false, err
 	} else if !found {
+		l.Debug("Not-app-group not found in cache", zap.String("groupId", groupId))
 		return false, nil
 	}
 
+	l.Debug("Not-app-group found in cache", zap.String("groupId", groupId), zap.Bool("value", notAppGroup))
 	return notAppGroup, nil
 }
 
 func (a *oktaAWSAppSettings) setNotAppGroupInCache(ctx context.Context, ss sessions.SessionStore, groupId string, value bool) error {
-	return session.SetJSON(ctx, ss, groupId, value, notAppGroupPrefix)
+	l := ctxzap.Extract(ctx)
+	err := session.SetJSON(ctx, ss, groupId, value, notAppGroupPrefix)
+	if err != nil {
+		l.Debug("Error setting not-app-group in cache", zap.String("groupId", groupId), zap.Bool("value", value), zap.Error(err))
+	} else {
+		l.Debug("Set not-app-group in cache", zap.String("groupId", groupId), zap.Bool("value", value))
+	}
+	return err
 }
 
 func appGroupSAMLRolesWrapperV5(ctx context.Context, appGroup oktav5.ApplicationGroupAssignment) (*OktaAppGroupWrapper, error) {
