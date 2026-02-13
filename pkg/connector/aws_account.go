@@ -388,6 +388,7 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 		if *appUser.Scope == appGroupScope && !awsConfig.JoinAllRoles && !awsConfig.SamlRolesUnionEnabled {
 			appUserSAMLRolesMap, err = o.collectRolesFromUserGroups(ctx, attrs.Session, *appUser.Id)
 			if err != nil {
+				l.Error("CollectRolesFromUserGroups failed", zap.Error(err))
 				return nil, nil, err
 			}
 		}
@@ -423,6 +424,7 @@ func (o *accountResourceType) collectRolesFromUserGroups(
 
 		appGroup, err := o.getOktaAppGroupFromCacheOrFetch(ctx, ss, *group.Id)
 		if err != nil {
+			l.Error("getOktaAppGroupFromCacheOrFetch failed", zap.Error(err))
 			return nil, err
 		}
 		if appGroup != nil {
@@ -690,11 +692,15 @@ func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Contex
 		defer resp.Body.Close()
 		errOkta, getErr := getErrorV5(resp)
 		if getErr != nil {
-			return nil, err
+			l.Error("Failed to parse error from GetApplicationGroupAssignment", zap.Error(getErr))
+			fullError := handleOktaResponseErrorWithRateLimitingV5(ctx, resp, err)
+			return nil, fullError
 		}
 
 		if errOkta.ErrorCode == nil {
-			return nil, errors.New("okta-aws-connector: failed to fetch application group assignment with unknown error")
+			l.Error("GetApplicationGroupAssignment returned error with nil ErrorCode")
+			fullError := handleOktaResponseErrorWithRateLimitingV5(ctx, resp, err)
+			return nil, fullError
 		}
 
 		errorSummary := ""
@@ -705,10 +711,10 @@ func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Contex
 		if *errOkta.ErrorCode != ResourceNotFoundExceptionErrorCode {
 			l.Error("Got *other* error from GetApplicationGroupAssignment", zap.Error(err))
 			fullError := handleOktaResponseErrorWithRateLimitingV5(ctx, resp, err)
-			l.Error("Returning rate limit error", zap.Error(fullError))
+			l.Error("Returning error from getOktaAppGroupFromCacheOrFetch", zap.Error(fullError))
 
 			l.Warn("okta-aws-connector: ", zap.String("ErrorCode", *errOkta.ErrorCode), zap.String("ErrorSummary", errorSummary))
-			return nil, fmt.Errorf("okta-aws-connector: %w", fullError)
+			return nil, fullError
 		}
 
 		// 404 means group is not assigned to the app - this is not an error, just no grant
