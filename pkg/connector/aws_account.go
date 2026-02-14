@@ -6,9 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	oktav5 "github.com/conductorone/okta-sdk-golang/v5/okta"
 
@@ -23,6 +26,8 @@ import (
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type OktaAppGroupWrapper struct {
@@ -269,23 +274,41 @@ func (o *accountResourceType) Grants(
 	page := bag.PageToken()
 
 	var rv []*v2.Grant
-	var oktaResp *oktav5.APIResponse
+	var nextPage string
+	var annos annotations.Annotations
 
 	switch bag.ResourceTypeID() {
 	case resourceTypeUser.Id:
-		rv, oktaResp, err = o.userGrants(ctx, resource, attrs, page)
+		rv, nextPage, annos, err = o.userGrants(ctx, resource, attrs, page)
 	case resourceTypeGroup.Id:
-		rv, oktaResp, err = o.groupGrants(ctx, resource, attrs, page)
+		rv, nextPage, annos, err = o.groupGrants(ctx, resource, attrs, page)
 	default:
-		rv, oktaResp, err = o.groupGrants(ctx, resource, attrs, page)
+		rv, nextPage, annos, err = o.groupGrants(ctx, resource, attrs, page)
 	}
 	if err != nil {
+		// Debug logging at Grants() level to see if rate limit data is preserved
+		l := ctxzap.Extract(ctx)
+		if st, ok := status.FromError(err); ok {
+			if st.Code() == codes.Unavailable {
+				l.Debug("Got Unavailable error in Grants()",
+					zap.Int("details_count", len(st.Details())))
+				for i, detail := range st.Details() {
+					if rlData, ok := detail.(*v2.RateLimitDescription); ok {
+						resetAt := rlData.GetResetAt().AsTime()
+						waitDuration := time.Until(resetAt)
+						l.Debug("RateLimitDescription in Grants()",
+							zap.Int("index", i),
+							zap.Int64("limit", rlData.GetLimit()),
+							zap.Int64("remaining", rlData.GetRemaining()),
+							zap.Time("reset_at", resetAt),
+							zap.Duration("wait_duration", waitDuration))
+					}
+				}
+			}
+		} else {
+			l.Debug("Failed to extract status from error in Grants()", zap.Error(err))
+		}
 		return nil, nil, err
-	}
-
-	nextPage, annos, err := parseRespV5(oktaResp)
-	if err != nil {
-		return nil, nil, fmt.Errorf("okta-aws-connector: failed to parse response: %w", err)
 	}
 
 	err = bag.Next(nextPage)
@@ -303,42 +326,56 @@ func (o *accountResourceType) Grants(
 	}, nil
 }
 
-func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resource, attrs resource2.SyncOpAttrs, page string) ([]*v2.Grant, *oktav5.APIResponse, error) {
+func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resource, attrs resource2.SyncOpAttrs, page string) ([]*v2.Grant, string, annotations.Annotations, error) {
 	l := ctxzap.Extract(ctx)
+	l.Info("userGrants() called", zap.String("page", page))
 	token := &attrs.PageToken
 
 	awsConfig, err := o.connector.getAWSApplicationConfig(ctx, attrs.Session)
 	if err != nil {
-		return nil, nil, fmt.Errorf("okta-aws-connector: error getting aws app settings config")
+		return nil, "", nil, fmt.Errorf("okta-aws-connector: error getting aws app settings config")
 	}
+
+	// Parse the provided page token to evaluate the page to start obtaining users from
+	// and the specific user (if any) to start collecting roles for.
+	oktaAfter, startUserIndex := parseUserGrantsPageToken(page)
+	l.Debug("Parsed user grants page token",
+		zap.String("oktaAfter", oktaAfter),
+		zap.Int("startUserIndex", startUserIndex))
 
 	var rv []*v2.Grant
 
-	appUsers, respContext, err := listApplicationUsersV5(ctx, o.connector.clientV5, o.connector.awsConfig.OktaAppId, token, page)
+	appUsers, respContext, err := listApplicationUsersV5(ctx, o.connector.clientV5, o.connector.awsConfig.OktaAppId, token, oktaAfter)
 	if err != nil {
-		return nil, nil, fmt.Errorf("okta-aws-connector: error listing application users %w", err)
+		return nil, "", nil, fmt.Errorf("okta-aws-connector: error listing application users %w", err)
 	}
 
-	for _, appUser := range appUsers {
-		appUserSAMLRolesMap := mapset.NewSet[string]()
+	// For our caller, extract the first part of our next page token and any annotations.
+	nextOktaPage, annos, err := parseRespV5(respContext.OktaResponse)
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to parse response: %w", err)
+	}
 
-		if appUser.Scope == nil {
+	// Process users starting from the second part of our page token.
+	for i := startUserIndex; i < len(appUsers); i++ {
+		appUser := appUsers[i]
+		if appUser.Id == nil {
+			l.Warn("okta-aws-connector: app user id was nil")
+			continue
+		} else if appUser.Scope == nil {
 			l.Warn("okta-aws-connector: app user scope was nil", zap.Any("userId", appUser.Id))
 			continue
 		}
+
+		appUserSAMLRolesMap := mapset.NewSet[string]()
 
 		// For users with direct assignments or with Union enabled, we extract samlRoles from their profile
 		if *appUser.Scope == appUserScope || (*appUser.Scope == appGroupScope && awsConfig.SamlRolesUnionEnabled) {
 			appUserSAMLRoles, err := getSAMLRolesFromAppUserProfileV5(ctx, appUser)
 			if err != nil {
-				return nil, nil, fmt.Errorf("okta-aws-connector: failed to get saml roles for user '%v': %w", appUser.Id, err)
+				return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to get saml roles for user '%v': %w", appUser.Id, err)
 			}
 			appUserSAMLRolesMap.Append(appUserSAMLRoles...)
-		}
-
-		if appUser.Id == nil {
-			l.Warn("okta-aws-connector: app user id was nil", zap.Any("userId", appUser.Id))
-			continue
 		}
 
 		// For group-scoped users (no direct assignment) and when Union/JoinAllRoles is disabled,
@@ -346,7 +383,19 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 		if *appUser.Scope == appGroupScope && !awsConfig.JoinAllRoles && !awsConfig.SamlRolesUnionEnabled {
 			appUserSAMLRolesMap, err = o.collectRolesFromUserGroups(ctx, attrs.Session, *appUser.Id)
 			if err != nil {
-				return nil, nil, err
+				// Check if this is a rate limit error.
+				if st, ok := status.FromError(err); ok && st.Code() == codes.Unavailable && i > startUserIndex {
+					// We have made some progress already. Return what we have so far, with a page token, with no error:
+					// forward progress on Grants() may require us to return here instead of
+					// asking to be completely restarted here.
+					nextPageToken := encodeUserGrantsPageToken(oktaAfter, i)
+					l.Info("Returning resume token for user grants", zap.String("resume_token", nextPageToken))
+					return rv, nextPageToken, annos, nil
+				}
+
+				// This is either not a rate-limit error OR we have not yet processed a whole user.
+				l.Error("CollectRolesFromUserGroups failed", zap.Error(err))
+				return nil, "", nil, err
 			}
 		}
 
@@ -355,7 +404,38 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 		}
 	}
 
-	return rv, respContext.OktaResponse, nil
+	return rv, encodeUserGrantsPageToken(nextOktaPage, 0), annos, nil
+}
+
+func parseUserGrantsPageToken(page string) (string, int) {
+	// The token is "okta page token | index of user in returned value" (or "").
+	if page == "" {
+		return "", 0
+	}
+
+	parts := strings.Split(page, "|")
+	if len(parts) == 1 {
+		// Just the Okta page token, no user index (implicitly 0).
+		return parts[0], 0
+	} else if len(parts) == 2 {
+		// The Okta page token and a user index; parse that.
+		userIndex := 0
+		if idx, err := strconv.Atoi(parts[1]); err == nil {
+			userIndex = idx
+		}
+		return parts[0], userIndex
+	}
+
+	// Invalid format, give up and start from the beginning.
+	return "", 0
+}
+
+func encodeUserGrantsPageToken(oktaAfter string, userIndex int) string {
+	// The token is "okta page token | index of user in returned value" (or "").
+	if oktaAfter == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s|%d", oktaAfter, userIndex)
 }
 
 func (o *accountResourceType) collectRolesFromUserGroups(
@@ -390,21 +470,28 @@ func (o *accountResourceType) collectRolesFromUserGroups(
 	return roles, nil
 }
 
-func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Resource, attrs resource2.SyncOpAttrs, page string) ([]*v2.Grant, *oktav5.APIResponse, error) {
+func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Resource, attrs resource2.SyncOpAttrs, page string) ([]*v2.Grant, string, annotations.Annotations, error) {
 	l := ctxzap.Extract(ctx)
+	l.Info("groupGrants() called", zap.String("page", page))
 	token := &attrs.PageToken
 
 	awsConfig, err := o.connector.getAWSApplicationConfig(ctx, attrs.Session)
 	if err != nil {
-		return nil, nil, fmt.Errorf("okta-aws-connector: error getting aws app settings config")
+		return nil, "", nil, fmt.Errorf("okta-aws-connector: error getting aws app settings config")
 	}
 	var rv []*v2.Grant
 
 	if awsConfig.UseGroupMapping {
 		groups, respCtx, err := listGroupsHelperV5(ctx, o.connector.clientV5, token, page)
 		if err != nil {
-			return nil, nil, fmt.Errorf("okta-aws-connector: failed to list groups: %w", err)
+			return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to list groups: %w", err)
 		}
+
+		nextPage, annos, err := parseRespV5(respCtx.OktaResponse)
+		if err != nil {
+			return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to parse response: %w", err)
+		}
+
 		for _, group := range groups {
 			if group.Profile.Name == nil {
 				l.Warn("okta-aws-connector: group profile name was nil", zap.Any("groupId", group.Id))
@@ -418,23 +505,28 @@ func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Reso
 
 			accountId, roleName, matchesRolePattern, err := parseAccountIDAndRoleFromGroupName(ctx, awsConfig.RoleRegex, *group.Profile.Name)
 			if err != nil {
-				return nil, nil, fmt.Errorf("okta-aws-connector: failed to parse account id and role from group name: %w", err)
+				return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to parse account id and role from group name: %w", err)
 			}
 			if !matchesRolePattern || accountId != resource.GetId().GetResource() {
 				continue
 			}
 			grant, err := o.accountGrantGroupExpandable(resource, roleName, *group.Id)
 			if err != nil {
-				return nil, nil, fmt.Errorf("okta-aws-connector: failed to create expandable group grant: %w", err)
+				return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to create expandable group grant: %w", err)
 			}
 			rv = append(rv, grant)
 		}
-		return rv, respCtx.OktaResponse, err
+		return rv, nextPage, annos, nil
 	}
 
 	appGroups, respCtx, err := listApplicationGroupAssignmentsV5(ctx, o.connector.clientV5, o.connector.awsConfig.OktaAppId, token, page)
 	if err != nil {
-		return nil, nil, fmt.Errorf("okta-aws-connector: failed to list application groups: %w", err)
+		return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to list application groups: %w", err)
+	}
+
+	nextPage, annos, err := parseRespV5(respCtx.OktaResponse)
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to parse response: %w", err)
 	}
 
 	for _, appGroup := range appGroups {
@@ -445,7 +537,7 @@ func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Reso
 
 		appGroupSAMLRoles, err := appGroupSAMLRolesWrapperV5(ctx, appGroup)
 		if err != nil {
-			return nil, nil, fmt.Errorf("okta-aws-connector: failed to get saml roles for app group: %w", err)
+			return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to get saml roles for app group: %w", err)
 		}
 
 		// TODO(lauren) we only need this when !awsConfig.JoinAllRoles
@@ -457,13 +549,22 @@ func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Reso
 			} else {
 				grant, err := o.accountGrantGroupExpandable(resource, role, *appGroup.Id)
 				if err != nil {
-					return nil, nil, fmt.Errorf("okta-aws-connector: failed to create expandable group grant: %w", err)
+					return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to create expandable group grant: %w", err)
 				}
 				rv = append(rv, grant)
 			}
 		}
 	}
-	return rv, respCtx.OktaResponse, err
+
+	// Explicitly return empty string when done
+	if nextPage == "" {
+		l.Info("groupGrants() returning complete", zap.Int("grants_count", len(rv)))
+	} else {
+		l.Info("groupGrants() returning with more pages",
+			zap.Int("grants_count", len(rv)),
+			zap.String("next_page", nextPage))
+	}
+	return rv, nextPage, annos, nil
 }
 
 func (o *accountResourceType) accountGrant(resource *v2.Resource, samlRole string, oktaUserId string) *v2.Grant {
@@ -624,6 +725,7 @@ func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Contex
 		return nil, err
 	}
 	if notAnAppGroup {
+		l.Debug("Not-app-group cache HIT - skipping API call", zap.String("groupId", groupId))
 		return nil, nil
 	}
 
@@ -636,13 +738,13 @@ func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Contex
 		}
 
 		defer resp.Body.Close()
-		errOkta, err := getErrorV5(resp)
-		if err != nil {
-			return nil, err
+		errOkta, getErr := getErrorV5(resp)
+		if getErr != nil {
+			return nil, fmt.Errorf("okta-aws-connector: failed to fetch application group assignment error: %w", handleOktaResponseErrorV5(ctx, resp, err))
 		}
 
 		if errOkta.ErrorCode == nil {
-			return nil, errors.New("okta-aws-connector: failed to fetch application group assignment with unknown error")
+			return nil, fmt.Errorf("okta-aws-connector: failed to fetch application group assignment okta error: %w", handleOktaResponseErrorV5(ctx, resp, err))
 		}
 
 		errorSummary := ""
@@ -652,9 +754,11 @@ func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Contex
 
 		if *errOkta.ErrorCode != ResourceNotFoundExceptionErrorCode {
 			l.Warn("okta-aws-connector: ", zap.String("ErrorCode", *errOkta.ErrorCode), zap.String("ErrorSummary", errorSummary))
-			return nil, fmt.Errorf("okta-aws-connector: %v", errOkta)
+			return nil, fmt.Errorf("okta-aws-connector: %w", handleOktaResponseErrorV5(ctx, resp, err))
 		}
 
+		// ResourceNotFound means the group is not assigned to the app - this is not an error,
+		// there is just no grant to emit here.
 		_ = awsConfig.setNotAppGroupInCache(ctx, ss, groupId, true)
 
 		return nil, nil
@@ -1070,10 +1174,10 @@ func listGroupsHelperV5(ctx context.Context, client *oktav5.APIClient, token *pa
 		Limit(defaultLimit).
 		After(after).
 		Execute()
-
 	if err != nil {
-		return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch groups from okta: %w", handleOktaResponseErrorV5(resp, err))
+		return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch groups from okta: %w", handleOktaResponseErrorV5(ctx, resp, err))
 	}
+
 	reqCtx, err := responseToContextV5(token, resp)
 	if err != nil {
 		return nil, nil, err
@@ -1082,19 +1186,46 @@ func listGroupsHelperV5(ctx context.Context, client *oktav5.APIClient, token *pa
 }
 
 func listUsersGroupsClientV5(ctx context.Context, client *oktav5.APIClient, userId string) ([]oktav5.Group, *responseContextV5, error) {
-	// TODO(golds): should we paginate or exhaust?
-	users, resp, err := client.UserAPI.ListUserGroups(ctx, userId).
-		Execute()
-	if err != nil {
-		return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch group users from okta: %w", handleOktaResponseErrorV5(resp, err))
+	var allGroups []oktav5.Group
+	var lastResp *oktav5.APIResponse
+	after := ""
+
+	// Call the Okta V5 SDK API method for this, but exhaust all pages (like the v2 SDK did automatically).
+	for {
+		groups, resp, err := client.UserAPI.ListUserGroups(ctx, userId).
+			After(after).
+			Execute()
+
+		lastResp = resp
+
+		if err != nil {
+			return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch group users from okta: %w", handleOktaResponseErrorV5(ctx, resp, err))
+		}
+
+		allGroups = append(allGroups, groups...)
+
+		// Check if there are more pages to grab.
+		if !resp.HasNextPage() {
+			break
+		}
+
+		// Create the next page token / after value.
+		nextPageURL, err := url.Parse(resp.NextPage())
+		if err != nil {
+			return nil, nil, fmt.Errorf("okta-aws-connector: failed to parse next page URL: %w", err)
+		}
+		after = nextPageURL.Query().Get("after")
+		if after == "" {
+			break
+		}
 	}
 
-	reqCtx, err := responseToContextV5(&pagination.Token{}, resp)
+	reqCtx, err := responseToContextV5(&pagination.Token{}, lastResp)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return users, reqCtx, nil
+	return allGroups, reqCtx, nil
 }
 
 /*

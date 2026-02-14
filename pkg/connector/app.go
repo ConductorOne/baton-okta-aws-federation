@@ -21,7 +21,7 @@ func listApplicationGroupAssignmentsV5(
 		Limit(defaultLimit).
 		Execute()
 	if err != nil {
-		return nil, nil, fmt.Errorf("okta-connectorv2: failed to fetch app group assignments from okta: %w", handleOktaResponseErrorV5(resp, err))
+		return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch app group assignments from okta: %w", handleOktaResponseErrorV5(ctx, resp, err))
 	}
 
 	reqCtx, err := responseToContextV5(token, resp)
@@ -38,7 +38,7 @@ func listApplicationUsersV5(ctx context.Context, client *oktav5.APIClient, appID
 		Limit(defaultLimit).
 		Execute()
 	if err != nil {
-		return nil, nil, fmt.Errorf("okta-connectorv2: failed to fetch app users from okta: %w", handleOktaResponseErrorV5(resp, err))
+		return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch app users from okta: %w", handleOktaResponseErrorV5(ctx, resp, err))
 	}
 
 	reqCtx, err := responseToContextV5(token, resp)
