@@ -374,7 +374,12 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 		}
 	}
 
-	return rv, encodeUserGrantsPageToken(nextOktaPage, 0), annos, nil
+	nextPageToken := ""
+	if nextOktaPage != "" {
+		nextPageToken = encodeUserGrantsPageToken(nextOktaPage, 0)
+	}
+
+	return rv, nextPageToken, annos, nil
 }
 
 func parseUserGrantsPageToken(page string) (string, int) {
@@ -401,10 +406,8 @@ func parseUserGrantsPageToken(page string) (string, int) {
 }
 
 func encodeUserGrantsPageToken(oktaAfter string, userIndex int) string {
-	// The token is "okta page token | index of user in returned value" (or "").
-	if oktaAfter == "" && userIndex == 0 {
-		return "" // No "|".
-	}
+	// The token is "okta page token | index of user in returned value".
+	// (Do not call this function when iteration is completely done).
 	return fmt.Sprintf("%s|%d", oktaAfter, userIndex)
 }
 
@@ -699,11 +702,13 @@ func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Contex
 		defer resp.Body.Close()
 		errOkta, getErr := getErrorV5(resp)
 		if getErr != nil {
-			return nil, fmt.Errorf("okta-aws-connector: failed to fetch application group assignment error: %w", handleOktaResponseErrorV5(ctx, resp, err))
+			l.Error("Failed to parse error from GetApplicationGroupAssignment", zap.Error(getErr))
+			return nil, handleOktaResponseErrorV5(ctx, resp, err)
 		}
 
 		if errOkta.ErrorCode == nil {
-			return nil, fmt.Errorf("okta-aws-connector: failed to fetch application group assignment okta error: %w", handleOktaResponseErrorV5(ctx, resp, err))
+			l.Error("GetApplicationGroupAssignment returned error with nil ErrorCode")
+			return nil, handleOktaResponseErrorV5(ctx, resp, err)
 		}
 
 		errorSummary := ""
@@ -713,7 +718,7 @@ func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Contex
 
 		if *errOkta.ErrorCode != ResourceNotFoundExceptionErrorCode {
 			l.Warn("okta-aws-connector: ", zap.String("ErrorCode", *errOkta.ErrorCode), zap.String("ErrorSummary", errorSummary))
-			return nil, fmt.Errorf("okta-aws-connector: %w", handleOktaResponseErrorV5(ctx, resp, err))
+			return nil, handleOktaResponseErrorV5(ctx, resp, err)
 		}
 
 		// ResourceNotFound means the group is not assigned to the app - this is not an error,
