@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
@@ -1153,46 +1152,19 @@ func listGroupsHelperV5(ctx context.Context, client *oktav5.APIClient, token *pa
 }
 
 func listUsersGroupsClientV5(ctx context.Context, client *oktav5.APIClient, userId string) ([]oktav5.Group, *responseContextV5, error) {
-	var allGroups []oktav5.Group
-	var lastResp *oktav5.APIResponse
-	after := ""
-
-	// Call the Okta V5 SDK API method for this, but exhaust all pages (like the v2 SDK did automatically).
-	for {
-		groups, resp, err := client.UserAPI.ListUserGroups(ctx, userId).
-			After(after).
-			Execute()
-
-		lastResp = resp
-
-		if err != nil {
-			return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch group users from okta: %w", handleOktaResponseErrorV5(ctx, resp, err))
-		}
-
-		allGroups = append(allGroups, groups...)
-
-		// Check if there are more pages to grab.
-		if !resp.HasNextPage() {
-			break
-		}
-
-		// Create the next page token / after value.
-		nextPageURL, err := url.Parse(resp.NextPage())
-		if err != nil {
-			return nil, nil, fmt.Errorf("okta-aws-connector: failed to parse next page URL: %w", err)
-		}
-		after = nextPageURL.Query().Get("after")
-		if after == "" {
-			break
-		}
+	// This API does not support pagination.
+	userGroups, resp, err := client.UserAPI.ListUserGroups(ctx, userId).
+		Execute()
+	if err != nil {
+		return nil, nil, fmt.Errorf("okta-aws-connector: failed to fetch group users from okta: %w", handleOktaResponseErrorV5(ctx, resp, err))
 	}
 
-	reqCtx, err := responseToContextV5(&pagination.Token{}, lastResp)
+	reqCtx, err := responseToContextV5(&pagination.Token{}, resp)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return allGroups, reqCtx, nil
+	return userGroups, reqCtx, nil
 }
 
 /*
