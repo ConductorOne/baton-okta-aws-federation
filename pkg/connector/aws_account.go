@@ -314,7 +314,10 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 
 	// Parse the provided page token to evaluate the page to start obtaining users from
 	// and the specific user (if any) to start collecting roles for.
-	oktaAfter, startUserIndex := parseUserGrantsPageToken(page)
+	oktaAfter, startUserIndex, err := parseUserGrantsPageToken(page)
+	if err != nil {
+		return nil, "", nil, err
+	}
 	var rv []*v2.Grant
 
 	appUsers, respContext, err := listApplicationUsersV5(ctx, o.connector.clientV5, o.connector.awsConfig.OktaAppId, token, oktaAfter)
@@ -382,27 +385,27 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 	return rv, nextPageToken, annos, nil
 }
 
-func parseUserGrantsPageToken(page string) (string, int) {
+func parseUserGrantsPageToken(page string) (string, int, error) {
 	// The token is "okta page token | index of user in returned value" (or "").
 	if page == "" {
-		return "", 0
+		return "", 0, nil
 	}
 
 	parts := strings.Split(page, "|")
 	if len(parts) == 1 {
 		// Just the Okta page token, no user index (implicitly 0).
-		return parts[0], 0
+		return parts[0], 0, nil
 	} else if len(parts) == 2 {
 		// The Okta page token and a user index; parse that.
 		userIndex := 0
 		if idx, err := strconv.Atoi(parts[1]); err == nil {
 			userIndex = idx
 		}
-		return parts[0], userIndex
+		return parts[0], userIndex, nil
 	}
 
 	// Invalid format, give up and start from the beginning.
-	return "", 0
+	return "", 0, fmt.Errorf("okta-aws-connector: invalid user grants page token: %s", page)
 }
 
 func encodeUserGrantsPageToken(oktaAfter string, userIndex int) string {
