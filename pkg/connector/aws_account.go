@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 
 	oktav5 "github.com/conductorone/okta-sdk-golang/v5/okta"
@@ -24,8 +23,6 @@ import (
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 type OktaAppGroupWrapper struct {
@@ -304,35 +301,81 @@ func (o *accountResourceType) Grants(
 
 func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resource, attrs resource2.SyncOpAttrs, page string) ([]*v2.Grant, string, annotations.Annotations, error) {
 	l := ctxzap.Extract(ctx)
-	token := &attrs.PageToken
 
 	awsConfig, err := o.connector.getAWSApplicationConfig(ctx, attrs.Session)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("okta-aws-connector: error getting aws app settings config")
 	}
 
-	// Parse the provided page token to evaluate the page to start obtaining users from
-	// and the specific user (if any) to start collecting roles for.
-	oktaAfter, startUserIndex, err := parseUserGrantsPageToken(page)
+	//
+	// Determine what to do here:
+	//  - If we have no ResourceID set in our token (`page`), we call the Okta API to list application users,
+	// and process any that we only need direct SAML roles for inline. If we saw any users that we need
+	// to collect roles from user groups for, then we push those roles into `page`.
+	//  - If we have a ResourceID set in `page`, we collect roles from the user groups for the user with
+	// the ID as that ResourceID (and only that user), and do not push any other work.
+	//
+	// The idea is that collecting roles from user groups requires potentially many API calls,
+	// and we're concerned about rate-limiting. If we process a single user at a time,
+	// we allow the SDK to retry us at a pretty granular level, minimizing the amount of work
+	// we have to do at each retry.
+	//
+	bag := &pagination.Bag{}
+	err = bag.Unmarshal(page)
 	if err != nil {
-		return nil, "", nil, err
+		return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to parse user grants page token: %w", err)
 	}
+
+	if bag.Current() == nil {
+		bag.Push(pagination.PageState{
+			Token:      "", // Token holds the next okta page, we want to start from the first one.
+			ResourceID: "", // ResourceID holds a user ID whose roles need to be collected from user groups. Empty means "process Okta page".
+		})
+	}
+	current := bag.Current()
+
 	var rv []*v2.Grant
+	var annos annotations.Annotations
 
-	appUsers, respContext, err := listApplicationUsersV5(ctx, o.connector.clientV5, o.connector.awsConfig.OktaAppId, token, oktaAfter)
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("okta-aws-connector: error listing application users %w", err)
+	// Check if we're resuming to process a specific app user.
+	if current.ResourceID != "" {
+		userID := current.ResourceID
+
+		appUserSAMLRolesMap, err := o.collectRolesFromUserGroups(ctx, attrs.Session, userID)
+		if err != nil {
+			// This may be a rate-limit error: in this (common) case, we'll retry this user later on.
+			return nil, "", nil, err
+		}
+
+		for samlRole := range appUserSAMLRolesMap.Iterator().C {
+			rv = append(rv, o.accountGrant(resource, samlRole, userID))
+		}
+
+		// Pop this user from the bag and continue to the next one (or next Okta page).
+		bag.Pop()
+		nextPageToken, err := bag.Marshal()
+		if err != nil {
+			return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to serialize bag: %w", err)
+		}
+
+		return rv, nextPageToken, annos, nil
 	}
 
-	// For our caller, extract the first part of our next page token and any annotations.
+	// Otherwise, we have a new batch of application users to list.
+	oktaAfter := bag.PageToken()
+	appUsers, respContext, err := listApplicationUsersV5(ctx, o.connector.clientV5, o.connector.awsConfig.OktaAppId, &attrs.PageToken, oktaAfter)
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("okta-aws-connector: error listing application users: %w", err)
+	}
+
 	nextOktaPage, annos, err := parseRespV5(respContext.OktaResponse)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to parse response: %w", err)
 	}
 
-	// Process users starting from the second part of our page token.
-	for i := startUserIndex; i < len(appUsers); i++ {
-		appUser := appUsers[i]
+	// Process any regular app users inline, and collect any users that need group-based role collection.
+	var usersNeedingRoleCollection []string
+	for _, appUser := range appUsers {
 		if appUser.Id == nil {
 			l.Warn("okta-aws-connector: app user id was nil")
 			continue
@@ -341,76 +384,65 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 			continue
 		}
 
-		appUserSAMLRolesMap := mapset.NewSet[string]()
-
 		// For users with direct assignments or with Union enabled, we extract samlRoles from their profile
 		if *appUser.Scope == appUserScope || (*appUser.Scope == appGroupScope && awsConfig.SamlRolesUnionEnabled) {
 			appUserSAMLRoles, err := getSAMLRolesFromAppUserProfileV5(ctx, appUser)
 			if err != nil {
 				return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to get saml roles for user '%v': %w", appUser.Id, err)
 			}
-			appUserSAMLRolesMap.Append(appUserSAMLRoles...)
-		}
 
-		// For group-scoped users (no direct assignment) and when Union/JoinAllRoles is disabled,
-		// samlRoles are gathered by inspecting the user's group memberships
-		if *appUser.Scope == appGroupScope && !awsConfig.JoinAllRoles && !awsConfig.SamlRolesUnionEnabled {
-			appUserSAMLRolesMap, err = o.collectRolesFromUserGroups(ctx, attrs.Session, *appUser.Id)
-			if err != nil {
-				// Check if this is a rate limit error.
-				if st, ok := status.FromError(err); ok && st.Code() == codes.Unavailable && i > startUserIndex {
-					// We have made some progress already. Return what we have so far, with a page token, with no error:
-					// forward progress on Grants() may require us to return here instead of
-					// asking to be completely restarted here.
-					nextPageToken := encodeUserGrantsPageToken(oktaAfter, i)
-					return rv, nextPageToken, annos, nil
-				}
-
-				// This is either not a rate-limit error OR we have not yet processed a whole user.
-				return nil, "", nil, err
+			for _, samlRole := range appUserSAMLRoles {
+				rv = append(rv, o.accountGrant(resource, samlRole, *appUser.Id))
 			}
-		}
-
-		for samlRole := range appUserSAMLRolesMap.Iterator().C {
-			rv = append(rv, o.accountGrant(resource, samlRole, *appUser.Id))
+		} else if *appUser.Scope == appGroupScope && !awsConfig.JoinAllRoles && !awsConfig.SamlRolesUnionEnabled {
+			// For group-scoped users (no direct assignment) and when Union/JoinAllRoles is disabled,
+			// samlRoles are gathered by inspecting the user's group memberships (which we'll do in when called back).
+			usersNeedingRoleCollection = append(usersNeedingRoleCollection, *appUser.Id)
 		}
 	}
 
-	nextPageToken := ""
-	if nextOktaPage != "" {
-		nextPageToken = encodeUserGrantsPageToken(nextOktaPage, 0)
+	// Push users needing group-based role collection into pagination.
+	if len(usersNeedingRoleCollection) > 0 {
+		// Pop the current Okta page state (since we iterated the users),
+		// then push the next Okta page state if there is one (so we continue pagination after processing all users).
+		bag.Pop()
+		if nextOktaPage != "" {
+			bag.Push(pagination.PageState{
+				Token:      nextOktaPage,
+				ResourceID: "", // Empty means "process Okta page".
+			})
+		}
+
+		// Then push all users (the order shouldn't matter).
+		for _, userID := range usersNeedingRoleCollection {
+			bag.Push(pagination.PageState{
+				Token:      oktaAfter,	// Same okta page, not next one.
+				ResourceID: userID,
+			})
+		}
+
+		// Set up the next page token, and return.
+		nextPageToken, err := bag.Marshal()
+		if err != nil {
+			return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to serialize bag: %w", err)
+		}
+
+		// Return grants from processed users, and we'll get called back for any future ones.
+		return rv, nextPageToken, annos, nil
+	}
+
+	// Go to the next users page (if any), and return.
+	err = bag.Next(nextOktaPage)
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to call get next page token: %w", err)
+	}
+
+	nextPageToken, err := bag.Marshal()
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to serialize bag: %w", err)
 	}
 
 	return rv, nextPageToken, annos, nil
-}
-
-func parseUserGrantsPageToken(page string) (string, int, error) {
-	// The token is "okta page token | index of user in returned value" (or "").
-	if page == "" {
-		return "", 0, nil
-	}
-
-	parts := strings.Split(page, "|")
-	if len(parts) == 1 {
-		// Just the Okta page token, no user index (implicitly 0).
-		return parts[0], 0, nil
-	} else if len(parts) == 2 {
-		// The Okta page token and a user index; parse that.
-		userIndex := 0
-		if idx, err := strconv.Atoi(parts[1]); err == nil {
-			userIndex = idx
-		}
-		return parts[0], userIndex, nil
-	}
-
-	// Invalid format, give up and start from the beginning.
-	return "", 0, fmt.Errorf("okta-aws-connector: invalid user grants page token: %s", page)
-}
-
-func encodeUserGrantsPageToken(oktaAfter string, userIndex int) string {
-	// The token is "okta page token | index of user in returned value".
-	// (Do not call this function when iteration is completely done).
-	return fmt.Sprintf("%s|%d", oktaAfter, userIndex)
 }
 
 func (o *accountResourceType) collectRolesFromUserGroups(
