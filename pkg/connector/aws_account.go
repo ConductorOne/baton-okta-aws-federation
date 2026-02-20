@@ -413,7 +413,9 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 		l.Debug("okta-aws-connector: queuing users for group role collection",
 			zap.Int("user_count", len(usersNeedingRoleCollection)))
 
-		// First, push the next Okta page state if there is one (so we continue pagination after processing all users).
+		// Pop the current Okta page state (since we iterated the users),
+		// then push the next Okta page state if there is one (so we continue pagination after processing all users).
+		bag.Pop()
 		if nextOktaPage != "" {
 			bag.Push(pagination.PageState{
 				Token:      nextOktaPage,
