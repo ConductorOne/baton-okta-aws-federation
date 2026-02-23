@@ -374,7 +374,7 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 	}
 
 	// Process any regular app users inline, and collect any users that need group-based role collection.
-	var usersNeedingRoleCollection []string
+	addedUsersNeedingRoleCollection := false
 	for _, appUser := range appUsers {
 		if appUser.Id == nil {
 			l.Warn("okta-aws-connector: app user id was nil")
@@ -397,12 +397,18 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 		} else if *appUser.Scope == appGroupScope && !awsConfig.JoinAllRoles && !awsConfig.SamlRolesUnionEnabled {
 			// For group-scoped users (no direct assignment) and when Union/JoinAllRoles is disabled,
 			// samlRoles are gathered by inspecting the user's group memberships (which we'll do in when called back).
-			usersNeedingRoleCollection = append(usersNeedingRoleCollection, *appUser.Id)
+			addedUsersNeedingRoleCollection = true
+
+			// Push this user into the bag.
+			bag.Push(pagination.PageState{
+				Token:      oktaAfter,	// Same okta page, not next one.
+				ResourceID: *appUser.Id,
+			})
 		}
 	}
 
-	// Push users needing group-based role collection into pagination.
-	if len(usersNeedingRoleCollection) > 0 {
+	// If we've added users to the bag...
+	if addedUsersNeedingRoleCollection {
 		// Pop the current Okta page state (since we iterated the users),
 		// then push the next Okta page state if there is one (so we continue pagination after processing all users).
 		bag.Pop()
@@ -410,14 +416,6 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 			bag.Push(pagination.PageState{
 				Token:      nextOktaPage,
 				ResourceID: "", // Empty means "process Okta page".
-			})
-		}
-
-		// Then push all users (the order shouldn't matter).
-		for _, userID := range usersNeedingRoleCollection {
-			bag.Push(pagination.PageState{
-				Token:      oktaAfter,	// Same okta page, not next one.
-				ResourceID: userID,
 			})
 		}
 
