@@ -429,7 +429,12 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 		return rv, nextPageToken, annos, nil
 	}
 
-	// Go to the next users page (if any), and return.
+	// If there are no more Okta pages, return empty token to signal pagination is done.
+	if nextOktaPage == "" {
+		return rv, "", annos, nil
+	}
+
+	// Go to the next users page.
 	err = bag.Next(nextOktaPage)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to call get next page token: %w", err)
