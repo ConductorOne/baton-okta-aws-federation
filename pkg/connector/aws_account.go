@@ -373,8 +373,18 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 		return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to parse response: %w", err)
 	}
 
+	// Pop the current Okta page state (we've consumed it by fetching this page),
+	// and push the next Okta page state if there is one. This must happen before
+	// pushing any per-user states, so the next page sits below them in the stack.
+	bag.Pop()
+	if nextOktaPage != "" {
+		bag.Push(pagination.PageState{
+			Token:      nextOktaPage,
+			ResourceID: "", // Empty means "process Okta page".
+		})
+	}
+
 	// Process any regular app users inline, and collect any users that need group-based role collection.
-	addedUsersNeedingRoleCollection := false
 	for _, appUser := range appUsers {
 		if appUser.Id == nil {
 			l.Warn("okta-aws-connector: app user id was nil")
@@ -397,7 +407,6 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 		} else if *appUser.Scope == appGroupScope && !awsConfig.JoinAllRoles && !awsConfig.SamlRolesUnionEnabled {
 			// For group-scoped users (no direct assignment) and when Union/JoinAllRoles is disabled,
 			// samlRoles are gathered by inspecting the user's group memberships (which we'll do in when called back).
-			addedUsersNeedingRoleCollection = true
 
 			// Push this user into the bag.
 			bag.Push(pagination.PageState{
@@ -405,34 +414,6 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 				ResourceID: *appUser.Id,
 			})
 		}
-	}
-
-	// If we've added users to the bag...
-	if addedUsersNeedingRoleCollection {
-		// Pop the current Okta page state (since we iterated the users),
-		// then push the next Okta page state if there is one (so we continue pagination after processing all users).
-		bag.Pop()
-		if nextOktaPage != "" {
-			bag.Push(pagination.PageState{
-				Token:      nextOktaPage,
-				ResourceID: "", // Empty means "process Okta page".
-			})
-		}
-
-		// Set up the next page token, and return.
-		nextPageToken, err := bag.Marshal()
-		if err != nil {
-			return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to serialize bag: %w", err)
-		}
-
-		// Return grants from processed users, and we'll get called back for any future ones.
-		return rv, nextPageToken, annos, nil
-	}
-
-	// Go to the next users page (if any), and return.
-	err = bag.Next(nextOktaPage)
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to call get next page token: %w", err)
 	}
 
 	nextPageToken, err := bag.Marshal()
