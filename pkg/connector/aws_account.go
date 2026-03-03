@@ -710,6 +710,9 @@ func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Contex
 	if err != nil {
 		if resp == nil {
 			return nil, fmt.Errorf("okta-aws-connector: failed to fetch application group assignment: %w", err)
+		} else if resp.Response == nil || resp.Body == nil {
+			// Treat as a possible 429 - Okta SDK can rarely construct a partial response.
+			return nil, handleOktaResponseErrorV5(ctx, resp, err)
 		}
 
 		defer resp.Body.Close()
