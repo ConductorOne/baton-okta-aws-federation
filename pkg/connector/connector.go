@@ -28,10 +28,12 @@ const ExpectedGroupNameCaptureGroupsWithGroupFilterForMultipleAWSInstances = 3
 
 var (
 	// Cache namespace prefixes.
-	appGroupPrefix    = sessions.WithPrefix("appGroup")
-	notAppGroupPrefix = sessions.WithPrefix("notAppGroup")
-	settingsPrefix    = sessions.WithPrefix("settings")
-	settingsEntry     = "settings"
+	appGroupPrefix       = sessions.WithPrefix("appGroup")
+	notAppGroupPrefix    = sessions.WithPrefix("notAppGroup")
+	appGroupIDSetPrefix  = sessions.WithPrefix("appGroupIDSet")
+	settingsPrefix       = sessions.WithPrefix("settings")
+	settingsEntry        = "settings"
+	appGroupIDSetEntry   = "allIDs"
 )
 
 type Okta struct {
@@ -470,6 +472,39 @@ func (a *oktaAWSAppSettings) checkIfNotAppGroupFromCache(ctx context.Context, ss
 
 func (a *oktaAWSAppSettings) setNotAppGroupInCache(ctx context.Context, ss sessions.SessionStore, groupId string, value bool) error {
 	return session.SetJSON(ctx, ss, groupId, value, notAppGroupPrefix)
+}
+
+// getAppGroupIDSet retrieves the complete set of app group IDs from the session store.
+// Returns nil if not found (e.g. not yet stored or evicted).
+func (a *oktaAWSAppSettings) getAppGroupIDSet(ctx context.Context, ss sessions.SessionStore) (map[string]bool, error) {
+	idSet, found, err := session.GetJSON[map[string]bool](ctx, ss, appGroupIDSetEntry, appGroupIDSetPrefix)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, nil
+	}
+	return idSet, nil
+}
+
+// setAppGroupIDSet stores the complete set of app group IDs in the session store.
+func (a *oktaAWSAppSettings) setAppGroupIDSet(ctx context.Context, ss sessions.SessionStore, idSet map[string]bool) error {
+	return session.SetJSON(ctx, ss, appGroupIDSetEntry, idSet, appGroupIDSetPrefix)
+}
+
+// appendToAppGroupIDSet adds group IDs to the stored set, creating it if needed.
+func (a *oktaAWSAppSettings) appendToAppGroupIDSet(ctx context.Context, ss sessions.SessionStore, groupIDs []string) error {
+	existing, err := a.getAppGroupIDSet(ctx, ss)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		existing = make(map[string]bool, len(groupIDs))
+	}
+	for _, id := range groupIDs {
+		existing[id] = true
+	}
+	return a.setAppGroupIDSet(ctx, ss, existing)
 }
 
 func appGroupSAMLRolesWrapperV5(ctx context.Context, appGroup oktav5.ApplicationGroupAssignment) (*OktaAppGroupWrapper, error) {

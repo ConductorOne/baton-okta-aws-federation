@@ -514,11 +514,14 @@ func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Reso
 		return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to parse response: %w", err)
 	}
 
+	var appGroupIDs []string
 	for _, appGroup := range appGroups {
 		if appGroup.Id == nil {
 			l.Warn("okta-aws-connector: app group id was nil")
 			continue
 		}
+
+		appGroupIDs = append(appGroupIDs, *appGroup.Id)
 
 		appGroupSAMLRoles, err := appGroupSAMLRolesWrapperV5(ctx, appGroup)
 		if err != nil {
@@ -540,6 +543,19 @@ func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Reso
 			}
 		}
 	}
+
+	// Accumulate app group IDs into the session store set.
+	// This is built up across pages so that collectRolesFromUserGroups
+	// can skip API calls for groups that are definitely not app groups.
+	// Skip this for small deployments (≤10 app groups on a single page)
+	// where the overhead isn't worth it.
+	isSinglePage := page == "" && nextPage == ""
+	if len(appGroupIDs) > 0 && !(isSinglePage && len(appGroupIDs) <= 10) {
+		if err := awsConfig.appendToAppGroupIDSet(ctx, attrs.Session, appGroupIDs); err != nil {
+			l.Warn("okta-aws-connector: failed to store app group ID set", zap.Error(err))
+		}
+	}
+
 	return rv, nextPage, annos, nil
 }
 
@@ -701,6 +717,20 @@ func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Contex
 		return nil, err
 	}
 	if notAnAppGroup {
+		return nil, nil
+	}
+
+	// If we have the complete set of app group IDs (built during group grants),
+	// check whether this group is in it. If the set exists and this group isn't
+	// in it, we know it's not an app group without an API call. If the set
+	// itself is missing (not yet built or evicted), fall through to the API call.
+	appGroupIDSet, err := awsConfig.getAppGroupIDSet(ctx, ss)
+	if err != nil {
+		l.Warn("okta-aws-connector: failed to load app group ID set, falling back to API", zap.Error(err))
+	}
+	if appGroupIDSet != nil && !appGroupIDSet[groupId] {
+		l.Debug("okta-aws-connector: group not in app group ID set, skipping API call", zap.String("groupId", groupId))
+		_ = awsConfig.setNotAppGroupInCache(ctx, ss, groupId, true)
 		return nil, nil
 	}
 
