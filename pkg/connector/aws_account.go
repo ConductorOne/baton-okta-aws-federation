@@ -48,6 +48,8 @@ const (
 
 	apiPathApplicationGroup = "/api/v1/apps/%s/groups/%s"
 	apiPathSamlRoles = "/api/v1/internal/apps/%s/types"
+
+	LargeAppGroupCollectionSize = 5
 )
 
 func (o *accountResourceType) ResourceType(_ context.Context) *v2.ResourceType {
@@ -602,7 +604,7 @@ func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Reso
 	// can skip API calls for groups that are definitely not app groups.
 	// We skip this for small deployments where the overhead isn't worth it.
 	isSinglePage := page == "" && nextPage == ""
-	if len(appGroupIDs) > 0 && (!isSinglePage || len(appGroupIDs) >= 5) {
+	if len(appGroupIDs) > 0 && (!isSinglePage || len(appGroupIDs) >= LargeAppGroupCollectionSize) {
 		if err := awsConfig.appendToAppGroupIDSet(ctx, attrs.Session, appGroupIDs); err != nil {
 			l.Warn("okta-aws-connector: failed to store app group ID set", zap.Error(err))
 		}
