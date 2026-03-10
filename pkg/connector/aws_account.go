@@ -49,7 +49,7 @@ const (
 	apiPathApplicationGroup = "/api/v1/apps/%s/groups/%s"
 	apiPathSamlRoles = "/api/v1/internal/apps/%s/types"
 
-	LargeAppGroupCollectionSize = 5
+	largeAppGroupCollectionSize = 5
 )
 
 func (o *accountResourceType) ResourceType(_ context.Context) *v2.ResourceType {
@@ -483,15 +483,15 @@ func (o *accountResourceType) collectRolesFromUserGroups(
 	}
 	sort.Strings(groupIDs)
 
+	roles := mapset.NewSet[string]()
 	if startIdx > len(groupIDs) {
 		l.Warn("okta-aws-connector: start index for user groups was > number of groups",
 			zap.Int("startIdx", startIdx), zap.Int("numGroups", len(groupIDs)))
-		return nil, -1, nil
+		return roles, -1, nil
 	} else if startIdx < 0 {
-		return nil, -1, fmt.Errorf("okta-aws-connector: invalid start index %d for user groups found", startIdx)
+		return roles, -1, fmt.Errorf("okta-aws-connector: invalid start index %d for user groups found", startIdx)
 	}
 
-	roles := mapset.NewSet[string]()
 	for i := startIdx; i < len(groupIDs); i++ {
 		appGroup, fetchErr := o.getOktaAppGroupFromCacheOrFetch(ctx, ss, groupIDs[i])
 		if fetchErr != nil {
@@ -604,7 +604,7 @@ func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Reso
 	// can skip API calls for groups that are definitely not app groups.
 	// We skip this for small deployments where the overhead isn't worth it.
 	isSinglePage := page == "" && nextPage == ""
-	if len(appGroupIDs) > 0 && (!isSinglePage || len(appGroupIDs) >= LargeAppGroupCollectionSize) {
+	if len(appGroupIDs) > 0 && (!isSinglePage || len(appGroupIDs) >= largeAppGroupCollectionSize) {
 		if err := awsConfig.appendToAppGroupIDSet(ctx, attrs.Session, appGroupIDs); err != nil {
 			l.Warn("okta-aws-connector: failed to store app group ID set", zap.Error(err))
 		}
