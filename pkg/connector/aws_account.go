@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"regexp"
 	"slices"
+	"sort"
+	"strconv"
 	"strings"
 
 	oktav5 "github.com/conductorone/okta-sdk-golang/v5/okta"
@@ -46,6 +48,8 @@ const (
 
 	apiPathApplicationGroup = "/api/v1/apps/%s/groups/%s"
 	apiPathSamlRoles = "/api/v1/internal/apps/%s/types"
+
+	largeAppGroupCollectionSize = 5
 )
 
 func (o *accountResourceType) ResourceType(_ context.Context) *v2.ResourceType {
@@ -310,15 +314,18 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 	//
 	// Determine what to do here:
 	//  - If we have no ResourceID set in our token (`page`), we call the Okta API to list application users,
-	// and process any that we only need direct SAML roles for inline. If we saw any users that we need
-	// to collect roles from user groups for, then we push those roles into `page`.
-	//  - If we have a ResourceID set in `page`, we collect roles from the user groups for the user with
-	// the ID as that ResourceID (and only that user), and do not push any other work.
+	//    and process any that we only need direct SAML roles for inline. If we saw any users that we need
+	//    to collect roles from user groups for, then we push those into `page`.
+	//  - If we have a ResourceID set in `page` with an empty Token, we process the user's groups from index 0.
+	//  - If we have a ResourceID set in `page` with a numeric Token, we resume processing the user's groups
+	//    from that index into the sorted group ID list.
 	//
 	// The idea is that collecting roles from user groups requires potentially many API calls,
 	// and we're concerned about rate-limiting. If we process a single user at a time,
 	// we allow the SDK to retry us at a pretty granular level, minimizing the amount of work
-	// we have to do at each retry.
+	// we have to do at each retry - and if that user has a particularly large amount of
+	// app group assignments to process, we must paginate at that level as well or else
+	// we may flat out time out when running in a lambda function.
 	//
 	bag := &pagination.Bag{}
 	err = bag.Unmarshal(page)
@@ -341,18 +348,37 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 	if current.ResourceID != "" {
 		userID := current.ResourceID
 
-		appUserSAMLRolesMap, err := o.collectRolesFromUserGroups(ctx, attrs.Session, userID)
+		// Parse the start index from Token (0 if empty/first attempt).
+		startIdx := 0
+		if current.Token != "" {
+			startIdx, err = strconv.Atoi(current.Token)
+			if err != nil {
+				return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to parse group index from token: %w", err)
+			}
+		}
+
+		roles, nextIdx, err := o.collectRolesFromUserGroups(ctx, attrs.Session, userID, startIdx)
 		if err != nil {
 			// This may be a rate-limit error: in this (common) case, we'll retry this user later on.
 			return nil, "", nil, err
 		}
 
-		for samlRole := range appUserSAMLRolesMap.Iterator().C {
+		for samlRole := range roles.Iterator().C {
 			rv = append(rv, o.accountGrant(resource, samlRole, userID))
 		}
 
-		// Pop this user from the bag and continue to the next one (or next Okta page).
+		// Pop this user from the bag - if we're not currently done with it,
+		// we'll push it back onto the bag immediately with a start index.
 		bag.Pop()
+
+		// If we didn't finish, push a continuation with the index we stopped at.
+		if nextIdx >= 0 {
+			bag.Push(pagination.PageState{
+				ResourceID: userID,
+				Token:      strconv.Itoa(nextIdx),
+			})
+		}
+
 		nextPageToken, err := bag.Marshal()
 		if err != nil {
 			return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to serialize bag: %w", err)
@@ -410,7 +436,7 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 
 			// Push this user into the bag.
 			bag.Push(pagination.PageState{
-				Token:      oktaAfter,	// Same okta page, not next one.
+				Token:      "", // Empty means start from group index 0.
 				ResourceID: *appUser.Id,
 			})
 		}
@@ -424,36 +450,65 @@ func (o *accountResourceType) userGrants(ctx context.Context, resource *v2.Resou
 	return rv, nextPageToken, annos, nil
 }
 
+// collectRolesFromUserGroups lists roles from a user's groups, sorted by ID,
+// and processes them starting from startIdx.
+//
+// On success, it returns all collected roles and the index -1.
+//
+// If a fetch error occurs after making some progress (i > startIdx), it returns the
+// roles collected so far and the index it stopped at.
+// If the error occurs on the very first group (no progress),
+// it returns that error (typically a rate-limiting related error).
+//
 func (o *accountResourceType) collectRolesFromUserGroups(
 	ctx context.Context,
 	ss sessions.SessionStore,
 	userID string,
-) (mapset.Set[string], error) {
+	startIdx int,
+) (mapset.Set[string], int, error) {
 	l := ctxzap.Extract(ctx)
 
 	userGroups, _, err := listUsersGroupsClientV5(ctx, o.connector.clientV5, userID)
 	if err != nil {
-		return nil, fmt.Errorf("okta-aws-connector: failed to get groups for user '%s': %w", userID, err)
+		return nil, -1, fmt.Errorf("okta-aws-connector: failed to get groups for user '%s': %w", userID, err)
 	}
 
-	roles := mapset.NewSet[string]()
-
+	var groupIDs []string
 	for _, group := range userGroups {
 		if group.Id == nil {
-			l.Warn("okta-aws-connector: user group id was nil", zap.Any("userId", userID), zap.Any("group", group))
+			l.Warn("okta-aws-connector: user group id was nil", zap.String("userId", userID))
 			continue
 		}
+		groupIDs = append(groupIDs, *group.Id)
+	}
+	sort.Strings(groupIDs)
 
-		appGroup, err := o.getOktaAppGroupFromCacheOrFetch(ctx, ss, *group.Id)
-		if err != nil {
-			return nil, err
+	roles := mapset.NewSet[string]()
+	if startIdx > len(groupIDs) {
+		l.Warn("okta-aws-connector: start index for user groups was > number of groups",
+			zap.Int("startIdx", startIdx), zap.Int("numGroups", len(groupIDs)))
+		return roles, -1, nil
+	} else if startIdx < 0 {
+		return roles, -1, fmt.Errorf("okta-aws-connector: invalid start index %d for user groups found", startIdx)
+	}
+
+	for i := startIdx; i < len(groupIDs); i++ {
+		appGroup, fetchErr := o.getOktaAppGroupFromCacheOrFetch(ctx, ss, groupIDs[i])
+		if fetchErr != nil {
+			// No progress made — return the (already processed, likely rate-limiting related) error.
+			if i == startIdx {
+				return nil, -1, fetchErr
+			}
+
+			return roles, i, nil
 		}
+
 		if appGroup != nil {
 			roles.Append(appGroup.samlRoles...)
 		}
 	}
 
-	return roles, nil
+	return roles, -1, nil
 }
 
 func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Resource, attrs resource2.SyncOpAttrs, page string) ([]*v2.Grant, string, annotations.Annotations, error) {
@@ -514,11 +569,14 @@ func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Reso
 		return nil, "", nil, fmt.Errorf("okta-aws-connector: failed to parse response: %w", err)
 	}
 
+	var appGroupIDs []string
 	for _, appGroup := range appGroups {
 		if appGroup.Id == nil {
 			l.Warn("okta-aws-connector: app group id was nil")
 			continue
 		}
+
+		appGroupIDs = append(appGroupIDs, *appGroup.Id)
 
 		appGroupSAMLRoles, err := appGroupSAMLRolesWrapperV5(ctx, appGroup)
 		if err != nil {
@@ -540,6 +598,18 @@ func (o *accountResourceType) groupGrants(ctx context.Context, resource *v2.Reso
 			}
 		}
 	}
+
+	// Accumulate app group IDs into the session store set.
+	// This is built up across pages so that getOktaAppGroupFromCacheOrFetch
+	// can skip API calls for groups that are definitely not app groups.
+	// We skip this for small deployments where the overhead isn't worth it.
+	isSinglePage := page == "" && nextPage == ""
+	if len(appGroupIDs) > 0 && (!isSinglePage || len(appGroupIDs) >= largeAppGroupCollectionSize) {
+		if err := awsConfig.appendToAppGroupIDSet(ctx, attrs.Session, appGroupIDs); err != nil {
+			l.Warn("okta-aws-connector: failed to store app group ID set", zap.Error(err))
+		}
+	}
+
 	return rv, nextPage, annos, nil
 }
 
@@ -701,6 +771,16 @@ func (o *accountResourceType) getOktaAppGroupFromCacheOrFetch(ctx context.Contex
 		return nil, err
 	}
 	if notAnAppGroup {
+		return nil, nil
+	}
+
+	// If we have the complete set of app group IDs (built during group grants),
+	// check whether this group is in it. If the set exists and this group isn't
+	// in it, we know it's not an app group without an API call. If the set
+	// itself is missing (not yet built or evicted), keep going.
+	appGroupIDSet, err := awsConfig.getAppGroupIDSet(ctx, ss)
+	if err == nil && appGroupIDSet != nil && !appGroupIDSet[groupId] {
+		_ = awsConfig.setNotAppGroupInCache(ctx, ss, groupId, true)
 		return nil, nil
 	}
 
