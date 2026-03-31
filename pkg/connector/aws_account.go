@@ -1087,8 +1087,7 @@ func (o *accountResourceType) Revoke(ctx context.Context, grant *v2.Grant) (anno
 				AppUserProfileRequestPayload: &oktav5.AppUserProfileRequestPayload{
 					Profile: appUserProfile,
 					AdditionalProperties: map[string]interface{}{
-						"samlRoles": newSamlRoles,
-						"scope":     appUserScope,
+						"scope": appUserScope,
 					},
 				},
 			}).
