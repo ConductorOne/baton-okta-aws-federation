@@ -118,27 +118,6 @@
       }
     },
     {
-      "name": "cache",
-      "description": "Enable response cache",
-      "boolField": {
-        "defaultValue": true
-      }
-    },
-    {
-      "name": "cache-tti",
-      "description": "Response cache cleanup interval in seconds",
-      "intField": {
-        "defaultValue": "60"
-      }
-    },
-    {
-      "name": "cache-ttl",
-      "description": "Response cache time to live in seconds",
-      "intField": {
-        "defaultValue": "300"
-      }
-    },
-    {
       "name": "aws-okta-app-id",
       "displayName": "AWS Okta App ID",
       "description": "The Okta app id for the AWS application",
