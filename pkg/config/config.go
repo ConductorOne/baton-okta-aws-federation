@@ -32,9 +32,24 @@ var (
 		field.WithRequired(true),
 	)
 
-	cache    = field.BoolField("cache", field.WithDescription("Enable response cache"), field.WithDefaultValue(true))
-	cacheTTI = field.IntField("cache-tti", field.WithDescription("Response cache cleanup interval in seconds"), field.WithDefaultValue(60))
-	cacheTTL = field.IntField("cache-ttl", field.WithDescription("Response cache time to live in seconds"), field.WithDefaultValue(300))
+	cache = field.BoolField("cache",
+		field.WithDisplayName("Enable cache"),
+		field.WithDescription("Enable response cache"),
+		field.WithDefaultValue(true),
+		field.WithExportTarget(field.ExportTargetCLIOnly),
+	)
+	cacheTTI = field.IntField("cache-tti",
+		field.WithDisplayName("Cache TTI"),
+		field.WithDescription("Response cache cleanup interval in seconds"),
+		field.WithDefaultValue(60),
+		field.WithExportTarget(field.ExportTargetCLIOnly),
+	)
+	cacheTTL = field.IntField("cache-ttl",
+		field.WithDisplayName("Cache TTL"),
+		field.WithDescription("Response cache time to live in seconds"),
+		field.WithDefaultValue(300),
+		field.WithExportTarget(field.ExportTargetCLIOnly),
+	)
 )
 
 //go:generate go run ./gen
