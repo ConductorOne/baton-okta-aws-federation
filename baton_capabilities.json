@@ -1,27 +1,27 @@
 {
-  "@type":  "type.googleapis.com/c1.connector.v2.ConnectorCapabilities",
-  "resourceTypeCapabilities":  [
+  "@type": "type.googleapis.com/c1.connector.v2.ConnectorCapabilities",
+  "resourceTypeCapabilities": [
     {
-      "resourceType":  {
-        "id":  "account",
-        "displayName":  "Account",
-        "annotations":  [
+      "resourceType": {
+        "id": "account",
+        "displayName": "Account",
+        "annotations": [
           {
-            "@type":  "type.googleapis.com/c1.connector.v2.V1Identifier",
-            "id":  "account"
+            "@type": "type.googleapis.com/c1.connector.v2.V1Identifier",
+            "id": "account"
           }
         ]
       },
-      "capabilities":  [
+      "capabilities": [
         "CAPABILITY_SYNC",
         "CAPABILITY_PROVISION"
       ],
-      "permissions":  {}
+      "permissions": {}
     }
   ],
-  "connectorCapabilities":  [
+  "connectorCapabilities": [
     "CAPABILITY_PROVISION",
     "CAPABILITY_SYNC"
   ],
-  "credentialDetails":  {}
+  "credentialDetails": {}
 }
