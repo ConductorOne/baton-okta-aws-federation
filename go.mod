@@ -3,7 +3,7 @@ module github.com/conductorone/baton-okta-aws-federation
 go 1.25.2
 
 require (
-	github.com/conductorone/baton-sdk v0.16.0
+	github.com/conductorone/baton-sdk v0.17.0
 	github.com/conductorone/okta-sdk-golang/v5 v5.0.8-conductorone
 	github.com/deckarep/golang-set/v2 v2.9.0
 	github.com/ennyjfrick/ruleguard-logfatal v0.0.2
