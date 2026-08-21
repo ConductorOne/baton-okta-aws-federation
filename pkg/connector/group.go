@@ -13,6 +13,12 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// Compile-time interface assertions.
+var (
+	_ connectorbuilder.ResourceSyncerV2           = (*groupResourceType)(nil)
+	_ connectorbuilder.ResourceProvisionerLimited = (*groupResourceType)(nil)
+)
+
 // groupResourceType exists solely to provision Okta group membership.
 //
 // This connector does not sync groups as first class resources: the AWS account
@@ -22,11 +28,6 @@ import (
 // still need a provisioner registered for the "group" resource type so the SDK
 // can dispatch grant/revoke calls against them. List/Entitlements/Grants are
 // intentionally empty stubs.
-var (
-	_ connectorbuilder.ResourceSyncerV2           = (*groupResourceType)(nil)
-	_ connectorbuilder.ResourceProvisionerLimited = (*groupResourceType)(nil)
-)
-
 type groupResourceType struct {
 	resourceType *v2.ResourceType
 	connector    *Okta
@@ -85,6 +86,11 @@ func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, e
 	groupId := entitlement.Resource.Id.Resource
 	userId := principal.Id.Resource
 
+	// AssignUserToGroup is a PUT and Okta treats it as idempotent: re-assigning a
+	// user who is already a member returns 204, not a conflict. There is therefore
+	// no "already exists" response to map to v2.GrantAlreadyExists here. A 409 on
+	// this endpoint means a genuine conflict (for example an app-managed or
+	// otherwise immutable group), so it is deliberately left as an error.
 	response, err := g.connector.clientV5.GroupAPI.AssignUserToGroup(ctx, groupId, userId).Execute()
 	if err != nil {
 		return nil, handleOktaResponseErrorV5(ctx, response, err)
@@ -117,7 +123,20 @@ func (g *groupResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annota
 
 	response, err := g.connector.clientV5.GroupAPI.UnassignUserFromGroup(ctx, groupId, userId).Execute()
 	if err != nil {
-		return nil, handleOktaResponseErrorV5(ctx, response, err)
+		oktaErr := handleOktaResponseErrorV5(ctx, response, err)
+		// Okta returns 204 when the user simply is not a member of the group, so a
+		// 404 here means the group or the user itself no longer exists. Either way
+		// the membership is already gone, which is a successful revoke rather than a
+		// failure. See "Grant Idempotency" in CLAUDE.md.
+		if status.Code(oktaErr) == codes.NotFound {
+			l.Debug(
+				"okta-aws-connector: group or user not found, treating membership as already revoked",
+				zap.String("group_id", groupId),
+				zap.String("user_id", userId),
+			)
+			return annotations.New(&v2.GrantAlreadyRevoked{}), nil
+		}
+		return nil, oktaErr
 	}
 
 	if response != nil && response.Response != nil {
