@@ -2,7 +2,6 @@ package connector
 
 import (
 	"context"
-	"fmt"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
@@ -10,6 +9,8 @@ import (
 	resource2 "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // groupResourceType exists solely to provision Okta group membership.
@@ -78,7 +79,7 @@ func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, e
 			zap.String("principal_type", principal.Id.ResourceType),
 			zap.String("principal_id", principal.Id.Resource),
 		)
-		return nil, fmt.Errorf("okta-aws-connector: only users can be granted group membership")
+		return nil, status.Error(codes.InvalidArgument, "okta-aws-connector: only users can be granted group membership")
 	}
 
 	groupId := entitlement.Resource.Id.Resource
@@ -108,7 +109,7 @@ func (g *groupResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annota
 			zap.String("principal_type", principal.Id.ResourceType),
 			zap.String("principal_id", principal.Id.Resource),
 		)
-		return nil, fmt.Errorf("okta-aws-connector: only users can have group membership revoked")
+		return nil, status.Error(codes.InvalidArgument, "okta-aws-connector: only users can have group membership revoked")
 	}
 
 	groupId := entitlement.Resource.Id.Resource
@@ -120,9 +121,9 @@ func (g *groupResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annota
 	}
 
 	if response != nil && response.Response != nil {
-		l.Warn("Membership has been revoked", zap.String("Status", response.Status))
+		l.Debug("Membership has been revoked", zap.String("Status", response.Status))
 	} else {
-		l.Warn("Membership has been revoked")
+		l.Debug("Membership has been revoked")
 	}
 
 	return nil, nil
