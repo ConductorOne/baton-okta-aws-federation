@@ -111,7 +111,7 @@ var (
 )
 
 func (o *Okta) ResourceSyncers(ctx context.Context) []connectorbuilder.ResourceSyncerV2 {
-	resourceSyncer := []connectorbuilder.ResourceSyncerV2{accountBuilder(o)}
+	resourceSyncer := []connectorbuilder.ResourceSyncerV2{accountBuilder(o), groupBuilder(o)}
 	return resourceSyncer
 }
 
