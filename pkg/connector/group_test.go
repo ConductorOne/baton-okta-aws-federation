@@ -138,6 +138,23 @@ func TestGroupGrantRevokePrincipalTypeGuard(t *testing.T) {
 			if tt.wantErr && len(*seen) != 0 {
 				t.Errorf("expected no Okta requests for rejected principal, got %v", *seen)
 			}
+
+			// For an accepted principal, pin the HTTP method and the groupId/userId
+			// argument order: a swap of the two id arguments to AssignUserToGroup /
+			// UnassignUserFromGroup would still return 204 from this fake server, so
+			// nothing above this assertion would catch it.
+			if !tt.wantErr {
+				wantPath := "/api/v1/groups/" + testGroupID + "/users/" + testUserID
+				wantSeen := []string{http.MethodPut + " " + wantPath, http.MethodDelete + " " + wantPath}
+				if len(*seen) != len(wantSeen) {
+					t.Fatalf("expected requests %v, got %v", wantSeen, *seen)
+				}
+				for i, want := range wantSeen {
+					if (*seen)[i] != want {
+						t.Errorf("request %d: expected %q, got %q", i, want, (*seen)[i])
+					}
+				}
+			}
 		})
 	}
 }
