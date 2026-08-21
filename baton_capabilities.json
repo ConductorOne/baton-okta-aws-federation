@@ -29,6 +29,9 @@
           {
             "@type": "type.googleapis.com/c1.connector.v2.V1Identifier",
             "id": "group"
+          },
+          {
+            "@type": "type.googleapis.com/c1.connector.v2.SkipEntitlementsAndGrants"
           }
         ]
       },
