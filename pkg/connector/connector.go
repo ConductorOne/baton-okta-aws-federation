@@ -97,11 +97,19 @@ var (
 		Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_USER},
 		Annotations: v1AnnotationsForResourceType("user", true),
 	}
+	// The group resource type is registered purely so the SDK has a provisioner to
+	// dispatch group membership grant/revoke against. groupResourceType.List,
+	// Entitlements and Grants are all stubs, so the resource type carries
+	// SkipEntitlementsAndGrants to declare that it has no sync data. This does not
+	// affect grant expansion: the "group:<id>:member" entitlements that
+	// accountGrantGroupExpandable points at are produced by the expansion phase,
+	// which the SDK gates on the global --skip-entitlements-and-grants flag
+	// (parallel_syncer.go), never on this per-resource-type annotation.
 	resourceTypeGroup = &v2.ResourceType{
 		Id:          "group",
 		DisplayName: "Group",
 		Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_GROUP},
-		Annotations: v1AnnotationsForResourceType("group", false),
+		Annotations: v1AnnotationsForResourceType("group", true),
 	}
 	resourceTypeAccount = &v2.ResourceType{
 		Id:          "account",
@@ -111,7 +119,7 @@ var (
 )
 
 func (o *Okta) ResourceSyncers(ctx context.Context) []connectorbuilder.ResourceSyncerV2 {
-	resourceSyncer := []connectorbuilder.ResourceSyncerV2{accountBuilder(o)}
+	resourceSyncer := []connectorbuilder.ResourceSyncerV2{accountBuilder(o), groupBuilder(o)}
 	return resourceSyncer
 }
 
