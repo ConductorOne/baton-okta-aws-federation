@@ -37,7 +37,6 @@
       },
       "capabilities": [
         "CAPABILITY_SYNC",
-        "CAPABILITY_TARGETED_SYNC",
         "CAPABILITY_PROVISION"
       ],
       "permissions": {}
@@ -45,9 +44,7 @@
   ],
   "connectorCapabilities": [
     "CAPABILITY_PROVISION",
-    "CAPABILITY_SYNC",
-    "CAPABILITY_TARGETED_SYNC",
-    "CAPABILITY_SERVICE_MODE_TARGETED_SYNC"
+    "CAPABILITY_SYNC"
   ],
   "credentialDetails": {}
 }

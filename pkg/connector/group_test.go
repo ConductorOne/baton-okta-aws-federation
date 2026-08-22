@@ -321,11 +321,6 @@ func TestGroupSyncStubs(t *testing.T) {
 		t.Errorf("Grants: expected (nil, nil, nil), got (%v, %v, %v)", grants, grantsResults, err)
 	}
 
-	resource, resourceAnnos, err := g.Get(ctx, groupResource.Id, nil)
-	if err != nil || resource != nil || resourceAnnos != nil {
-		t.Errorf("Get: expected (nil, nil, nil), got (%v, %v, %v)", resource, resourceAnnos, err)
-	}
-
 	if got := g.ResourceType(ctx); got != resourceTypeGroup {
 		t.Errorf("ResourceType: expected resourceTypeGroup, got %v", got)
 	}

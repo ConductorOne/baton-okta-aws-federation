@@ -15,9 +15,8 @@ import (
 
 // Compile-time interface assertions.
 var (
-	_ connectorbuilder.ResourceSyncerV2              = (*groupResourceType)(nil)
-	_ connectorbuilder.ResourceProvisionerLimited    = (*groupResourceType)(nil)
-	_ connectorbuilder.ResourceTargetedSyncerLimited = (*groupResourceType)(nil)
+	_ connectorbuilder.ResourceSyncerV2           = (*groupResourceType)(nil)
+	_ connectorbuilder.ResourceProvisionerLimited = (*groupResourceType)(nil)
 )
 
 // groupResourceType exists solely to provision Okta group membership.
@@ -27,7 +26,7 @@ var (
 // annotations that point at "group:<id>:member" entitlements. Those entitlements
 // are therefore created by grant expansion rather than by a group sync, but they
 // still need a provisioner registered for the "group" resource type so the SDK
-// can dispatch grant/revoke calls against them. List/Entitlements/Grants/Get are
+// can dispatch grant/revoke calls against them. List/Entitlements/Grants are
 // intentionally empty stubs.
 type groupResourceType struct {
 	resourceType *v2.ResourceType
@@ -70,15 +69,6 @@ func (g *groupResourceType) Grants(
 	resource *v2.Resource,
 	attrs resource2.SyncOpAttrs,
 ) ([]*v2.Grant, *resource2.SyncOpResults, error) {
-	return nil, nil, nil
-}
-
-// Get is intentionally a stub: see List.
-func (g *groupResourceType) Get(
-	ctx context.Context,
-	resourceId *v2.ResourceId,
-	parentResourceId *v2.ResourceId,
-) (*v2.Resource, annotations.Annotations, error) {
 	return nil, nil, nil
 }
 
