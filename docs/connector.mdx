@@ -18,6 +18,12 @@ sidebarTitle: "Okta AWS Federation"
 | Groups assigned to the AWS app | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |
 | Application assignments for the AWS app | <Icon icon="square-check" iconType="solid"  color="#c937ae"/> |  |
 
+<Warning>
+**This connector requires an Okta connector for the same Okta organization.** Group-based AWS role access is resolved against that connector, so set it up alongside this one. Without it, the AWS roles a user holds through a group do not appear.
+</Warning>
+
+Group membership itself is read from the paired Okta connector rather than by this connector. When a group's membership changes, sync the Okta connector first, then this one, so the change is reflected in the AWS roles shown for each user.
+
 ## Gather Okta credentials 
 
 Configuring the connector requires you to pass in credentials generated in Okta. Gather these credentials before you move on.
