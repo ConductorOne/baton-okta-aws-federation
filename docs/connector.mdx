@@ -22,7 +22,7 @@ sidebarTitle: "Okta AWS Federation"
 **This connector requires an Okta connector for the same Okta organization.** Group-based AWS role access is resolved against that connector, so set it up alongside this one. Without it, the AWS roles a user holds through a group do not appear.
 </Warning>
 
-Group membership itself is read from the paired Okta connector rather than by this connector. When a group's membership changes, sync the Okta connector first, then this one, so the change is reflected in the AWS roles shown for each user.
+The groups and their membership are imported from the paired Okta connector, not read by this one. When a group's membership changes, sync the Okta connector first, then this one, so the change is reflected in the AWS roles shown for each user.
 
 ## Gather Okta credentials 
 
