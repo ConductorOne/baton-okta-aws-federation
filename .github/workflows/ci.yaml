@@ -30,6 +30,9 @@ jobs:
       # - name: Grant entitlement (even though it probably already exists)
       #   run: |
       #     ./baton-okta-aws-federation --grant-entitlement ${{ env.CONNECTOR_ENTITLEMENT }} --grant-principal ${{ env.CONNECTOR_PRINCIPAL }} --grant-principal-type ${{ env.CONNECTOR_PRINCIPAL_TYPE }}
+      - name: TEMP debug dump grants
+        run: |
+          ./baton-okta-aws-federation && baton grants --output-format=json
       - name: Check for grant
         run: |
           ./baton-okta-aws-federation && baton grants --entitlement ${{ env.CONNECTOR_ENTITLEMENT }} --output-format=json | jq -e ".grants | any(.principal.id.resource ==\"${{ env.CONNECTOR_PRINCIPAL }}\")"
