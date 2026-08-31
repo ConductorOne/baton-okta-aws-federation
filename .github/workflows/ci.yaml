@@ -22,7 +22,7 @@ jobs:
         with:
           go-version-file: "go.mod"
       - name: Install baton
-        uses: conductorone/github-workflows/actions/get-baton@v2
+        uses: conductorone/github-workflows/actions/get-baton@v4
       - name: Build baton-okta-aws-federation
         run: go build ./cmd/baton-okta-aws-federation
       - name: Run baton-okta-aws-federation
