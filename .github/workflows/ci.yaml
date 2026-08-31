@@ -10,10 +10,10 @@ jobs:
       BATON_DOMAIN: ${{ secrets.BATON_DOMAIN }}
       BATON_AWS_OKTA_APP_ID: ${{ secrets.BATON_AWS_OKTA_APP_ID }}
       # The following parameters are passed to grant/revoke commands
-      CONNECTOR_GRANT: 'account:166786020837:ConductorOneIntegrationAWSConnectorTest:user:00u9v0dr25mnwWRbK5d7'
-      CONNECTOR_ENTITLEMENT: 'account:166786020837:ConductorOneIntegrationAWSConnectorTest'
-      CONNECTOR_PRINCIPAL_TYPE: 'user'
-      CONNECTOR_PRINCIPAL: '00u9v0dr25mnwWRbK5d7'
+      CONNECTOR_GRANT: ${{ vars.CONNECTOR_GRANT }}
+      CONNECTOR_ENTITLEMENT: ${{ vars.CONNECTOR_ENTITLEMENT }}
+      CONNECTOR_PRINCIPAL_TYPE: ${{ vars.CONNECTOR_PRINCIPAL_TYPE }}
+      CONNECTOR_PRINCIPAL: ${{ vars.CONNECTOR_PRINCIPAL }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -30,9 +30,6 @@ jobs:
       # - name: Grant entitlement (even though it probably already exists)
       #   run: |
       #     ./baton-okta-aws-federation --grant-entitlement ${{ env.CONNECTOR_ENTITLEMENT }} --grant-principal ${{ env.CONNECTOR_PRINCIPAL }} --grant-principal-type ${{ env.CONNECTOR_PRINCIPAL_TYPE }}
-      - name: TEMP debug dump grants
-        run: |
-          ./baton-okta-aws-federation && baton grants --output-format=json
       - name: Check for grant
         run: |
           ./baton-okta-aws-federation && baton grants --entitlement ${{ env.CONNECTOR_ENTITLEMENT }} --output-format=json | jq -e ".grants | any(.principal.id.resource ==\"${{ env.CONNECTOR_PRINCIPAL }}\")"
