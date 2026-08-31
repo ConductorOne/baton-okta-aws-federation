@@ -10,10 +10,10 @@ jobs:
       BATON_DOMAIN: ${{ secrets.BATON_DOMAIN }}
       BATON_AWS_OKTA_APP_ID: ${{ secrets.BATON_AWS_OKTA_APP_ID }}
       # The following parameters are passed to grant/revoke commands
-      CONNECTOR_GRANT: 'account:166786020837:ConductorOneIntegrationAWSConnectorTest:user:00u9v0dr25mnwWRbK5d7'
-      CONNECTOR_ENTITLEMENT: 'account:166786020837:ConductorOneIntegrationAWSConnectorTest'
-      CONNECTOR_PRINCIPAL_TYPE: 'user'
-      CONNECTOR_PRINCIPAL: '00u9v0dr25mnwWRbK5d7'
+      CONNECTOR_GRANT: ${{ vars.CONNECTOR_GRANT }}
+      CONNECTOR_ENTITLEMENT: ${{ vars.CONNECTOR_ENTITLEMENT }}
+      CONNECTOR_PRINCIPAL_TYPE: ${{ vars.CONNECTOR_PRINCIPAL_TYPE }}
+      CONNECTOR_PRINCIPAL: ${{ vars.CONNECTOR_PRINCIPAL }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -22,7 +22,7 @@ jobs:
         with:
           go-version-file: "go.mod"
       - name: Install baton
-        uses: conductorone/github-workflows/actions/get-baton@v2
+        uses: conductorone/github-workflows/actions/get-baton@v4
       - name: Build baton-okta-aws-federation
         run: go build ./cmd/baton-okta-aws-federation
       - name: Run baton-okta-aws-federation

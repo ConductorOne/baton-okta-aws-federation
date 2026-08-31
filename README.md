@@ -2,7 +2,7 @@
 
 # `baton-okta-aws-federation` [![Go Reference](https://pkg.go.dev/badge/github.com/conductorone/baton-okta-aws-federation.svg)](https://pkg.go.dev/github.com/conductorone/baton-okta-aws-federation) ![ci](https://github.com/conductorone/baton-okta-aws-federation/actions/workflows/ci.yaml/badge.svg) ![verify](https://github.com/conductorone/baton-okta-aws-federation/actions/workflows/verify.yaml/badge.svg)
 
-`baton-okta-aws-federation` is a connector for Okta built using the [Baton SDK](https://github.com/conductorone/baton-sdk). It communicates with the Okta API to sync data about which groups and users have access to applications, groups, and roles within an Okta domain.
+`baton-okta-aws-federation` is a connector for Okta built using the [Baton SDK](https://github.com/conductorone/baton-sdk). It governs a single AWS Account Federation SAML application inside an Okta organization: it syncs the AWS accounts reachable through that application, the SAML roles available in each, and who holds them.
 
 Check out [Baton](https://github.com/conductorone/baton) to learn more about the project in general.
 
@@ -13,24 +13,14 @@ Check out [Baton](https://github.com/conductorone/baton) to learn more about the
 ```
 brew install conductorone/baton/baton conductorone/baton/baton-okta-aws-federation
 
-BATON_API_TOKEN=oktaAPIToken BATON_DOMAIN=domain-1234.okta.com baton-okta-aws-federation
-baton resources
-```
-
-Or auth using a public/private keypair
-
-```
-BATON_OKTA_CLIENT_ID=appClientID \
-BATON_OKTA_PRIVATE_KEY='auth.key' \
-BATON_OKTA_PRIVATE_KEY_ID=appKID \
-BATON_DOMAIN=domain-1234.okta.com baton-okta-aws-federation
+BATON_API_TOKEN=oktaAPIToken BATON_DOMAIN=domain-1234.okta.com BATON_AWS_OKTA_APP_ID=awsAppID baton-okta-aws-federation
 baton resources
 ```
 
 ## docker
 
 ```
-docker run --rm -v $(pwd):/out -e BATON_API_TOKEN=oktaAPIToken -e BATON_DOMAIN=domain-1234.okta.com ghcr.io/conductorone/baton-okta-aws-federation:latest -f "/out/sync.c1z"
+docker run --rm -v $(pwd):/out -e BATON_API_TOKEN=oktaAPIToken -e BATON_DOMAIN=domain-1234.okta.com -e BATON_AWS_OKTA_APP_ID=awsAppID ghcr.io/conductorone/baton-okta-aws-federation:latest -f "/out/sync.c1z"
 docker run --rm -v $(pwd):/out ghcr.io/conductorone/baton:latest -f "/out/sync.c1z" resources
 ```
 
@@ -40,56 +30,41 @@ docker run --rm -v $(pwd):/out ghcr.io/conductorone/baton:latest -f "/out/sync.c
 go install github.com/conductorone/baton/cmd/baton@main
 go install github.com/conductorone/baton-okta-aws-federation/cmd/baton-okta-aws-federation@main
 
-BATON_API_TOKEN=oktaAPIToken BATON_DOMAIN=domain-1234.okta.com baton-okta-aws-federation
+BATON_API_TOKEN=oktaAPIToken BATON_DOMAIN=domain-1234.okta.com BATON_AWS_OKTA_APP_ID=awsAppID baton-okta-aws-federation
 baton resources
 ```
 
 # Data Model
 
-`baton-okta-aws-federation` will pull down information about the following Okta resources:
+`baton-okta-aws-federation` syncs two resource types from the AWS Account Federation
+application it is pointed at:
 
-- Applications
-- Groups
-- Roles
-- Users
-- Custom-Roles
-- Resource-Sets
-- Resourceset-Bindings
+- **Accounts** — an AWS account reachable through the application. Its entitlements are the
+  SAML roles available in that account.
+- **Groups** — Okta groups that carry AWS role access. This connector does not sync groups as
+  first-class resources; the group resource type exists so that group membership can be
+  granted and revoked. See "Group membership and the paired Okta connector" below.
 
-By default, `baton-okta-aws-federation` will sync information for inactive applications. You can exclude inactive applications setting the `--sync-inactive-apps` flag to `false`.
+Grants on an account's role entitlements are emitted to two kinds of principal: directly to
+the Okta users assigned to the application, and to the Okta groups assigned to it.
 
-For syncing custom roles `--sync-custom-roles` must be provided. Its default value is `false`.
+## Group membership and the paired Okta connector
 
-We have also introduced resourceset-bindings(resourcesetID and custom roles ID) for provisioning custom roles and members.
+This connector reads AWS role access; it does not read Okta group membership. The groups
+themselves, and the membership behind them, are imported into C1 from a **separate Okta
+connector** synced from the same Okta organization, configured as the application's shared
+identity source. Grants this connector emits to a group principal carry an annotation pointing
+at that group's `member` entitlement, and C1's grant expansion links the two — it does not
+create them. Two consequences worth knowing before you deploy it:
 
-## Resourceset-bindings, custom roles and members(Users or Groups) usage:
+- An Okta connector for the same organization must exist alongside this one. Without it, the
+  group membership behind AWS role access does not resolve.
+- After a group membership changes, both connectors need to sync before the change is
+  reflected — the Okta connector first, because it is the source of the membership, then this
+  one, which re-runs the expansion.
 
-- Let's use some IDs for this example
-```
-Resource Set `iamkuwy3gqcfNexfQ697`
-Custom Role `cr0kuwv5507zJCtSy697`
-Member `00ujp51vjgWd6ylZ6697`
-```
-
-- Granting custom roles for users.
-```
-BATON_API_TOKEN='oktaAPIToken' BATON_DOMAIN='domain-1234.okta.com' baton-okta-aws-federation \
---grant-entitlement 'resourceset-binding:iamkuwy3gqcfNexfQ697:cr0kuwv5507zJCtSy697:member' --grant-principal-type 'user' --grant-principal '00ujp51vjgWd6ylZ6697'
-```
-
-In the previous example we granted the custom role `cr0kuwv5507zJCtSy697` to user `00ujp5a9z0rMTsPRW697`.
-
-- Revoking custom role grants(Unassigns a Member)
-```
-BATON_API_TOKEN='oktaAPIToken' BATON_DOMAIN='domain-1234.okta.com' baton-okta-aws-federation \
---revoke-grant 'resourceset-binding:iamkuwy3gqcfNexfQ697:cr0kuwv5507zJCtSy697:member:user:00ujp51vjgWd6ylZ6697'
-```
-
-- Revoking everything associated to custom role(Deletes a Binding of a Role)
-```
-BATON_API_TOKEN='oktaAPIToken' BATON_DOMAIN='domain-1234.okta.com' baton-okta-aws-federation \
-resource-set:iamkuwy3gqcfNexfQ697:bindings:custom-role:cr0kuwv5507zJCtSy697
-```
+Granting or revoking a group's `member` entitlement is dispatched to this connector, which
+calls Okta's group membership API directly.
 
 # Contributing, Support and Issues
 
