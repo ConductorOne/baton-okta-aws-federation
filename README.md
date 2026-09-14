@@ -36,23 +36,26 @@ baton resources
 
 # Data Model
 
-`baton-okta-aws-federation` syncs two resource types from the AWS Account Federation
-application it is pointed at:
+`baton-okta-aws-federation` syncs one resource type from the AWS Account Federation
+application it is pointed at, and emits grants to the group principals that carry AWS role
+access:
 
 - **Accounts** — an AWS account reachable through the application. Its entitlements are the
   SAML roles available in that account.
 - **Groups** — Okta groups that carry AWS role access. This connector does not sync groups as
-  first-class resources; the group resource type exists so that group membership can be
-  granted and revoked. See "Group membership and the paired Okta connector" below.
+  first-class resources, and it does not manage Okta group membership; group principals appear
+  only on the grants it emits against an account's role entitlements. See "Group membership and
+  the paired Okta connector" below.
 
 Grants on an account's role entitlements are emitted to two kinds of principal: directly to
 the Okta users assigned to the application, and to the Okta groups assigned to it.
 
 ## Group membership and the paired Okta connector
 
-This connector reads AWS role access; it does not read Okta group membership. The groups
-themselves, and the membership behind them, are imported into C1 from a **separate Okta
-connector** synced from the same Okta organization, configured as the application's shared
+This connector does not sync group membership. It does read a user's Okta group list from the
+Okta API during grant sync — that is how the roles a user holds through groups are resolved —
+but the group resources and their `member` entitlements are imported into C1 from a **separate
+Okta connector** synced from the same Okta organization, configured as the application's shared
 identity source. Grants this connector emits to a group principal carry an annotation pointing
 at that group's `member` entitlement, and C1's grant expansion links the two — it does not
 create them. Two consequences worth knowing before you deploy it:
@@ -63,8 +66,10 @@ create them. Two consequences worth knowing before you deploy it:
   reflected — the Okta connector first, because it is the source of the membership, then this
   one, which re-runs the expansion.
 
-Granting or revoking a group's `member` entitlement is dispatched to this connector, which
-calls Okta's group membership API directly.
+This connector does not provision group membership: the `member` entitlement on a group
+resource belongs to the paired Okta connector, and granting or revoking it is dispatched
+there, not here. What this connector provisions is AWS role access — assigning or revoking a
+user's or a group's SAML role on the AWS app.
 
 # Contributing, Support and Issues
 
