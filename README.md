@@ -52,9 +52,10 @@ the Okta users assigned to the application, and to the Okta groups assigned to i
 
 ## Group membership and the paired Okta connector
 
-This connector reads AWS role access; it does not read Okta group membership. The groups
-themselves, and the membership behind them, are imported into C1 from a **separate Okta
-connector** synced from the same Okta organization, configured as the application's shared
+This connector does not sync group membership. It does read a user's Okta group list from the
+Okta API during grant sync — that is how the roles a user holds through groups are resolved —
+but the group resources and their `member` entitlements are imported into C1 from a **separate
+Okta connector** synced from the same Okta organization, configured as the application's shared
 identity source. Grants this connector emits to a group principal carry an annotation pointing
 at that group's `member` entitlement, and C1's grant expansion links the two — it does not
 create them. Two consequences worth knowing before you deploy it:

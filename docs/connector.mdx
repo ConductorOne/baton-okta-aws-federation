@@ -24,7 +24,7 @@ sidebarTitle: "Okta AWS Federation"
 
 The groups and their membership are imported from the paired Okta connector, not read by this one. When a group's membership changes, sync the Okta connector first, then this one, so the change is reflected in the AWS roles shown for each user.
 
-**Provisioning scope.** This connector provisions AWS role access, not Okta identities. It assigns and revokes a SAML role on the AWS app — for a user directly assigned to the app, or for a group assigned to it — and it does not create or delete users or groups. It does not provision Okta group membership, and it does not manage Okta admin roles. Grant or revoke a user's membership in an Okta group through the paired Okta connector, not this one.
+**Provisioning scope.** This connector provisions AWS role access, not Okta identities. It assigns and revokes a SAML role on the AWS app — for a user directly assigned to the app, or for a group assigned to it — and it does not create or delete users or groups. It does not provision Okta group membership, and it does not manage Okta admin roles. Grant or revoke a user's membership in an Okta group through the paired Okta connector, not this one. Role provisioning is unavailable when the AWS app uses **Connect Okta to multiple AWS instances via user groups** (Okta's `useGroupMapping` setting): in that mode role access is derived from group names rather than application assignments, and grant and revoke requests are rejected.
 
 ## Gather Okta credentials 
 

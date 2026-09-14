@@ -42,10 +42,10 @@ While developing the connector, please fill out this form. This information is n
 
 ## Additional setup notes
 
-1. This connector requires a separate Okta connector for the same Okta organization. Group membership is read from that connector, and the AWS role access a user holds through a group is resolved against it. Without the paired connector, group-based access does not resolve. Group membership is also provisioned through that connector, not this one.
+1. This connector requires a separate Okta connector for the same Okta organization. Group resources and their `member` entitlements are sourced from that connector, and the AWS role access a user holds through a group is resolved against it. Without the paired connector, group-based access does not resolve. This connector does read a user's Okta group list directly during grant sync to expand those roles. Group membership is also provisioned through that connector, not this one.
 
 2. After a group membership changes, both connectors must sync before the change is reflected: the Okta connector first, because it is the source of the membership, then this connector, which re-runs the expansion.
 
-3. The connector's behaviour depends on the AWS Account Federation app's own settings in Okta, not only on connector configuration. `useGroupMapping`, `joinAllRoles` and `identityProviderArn` are read from the application and determine which accounts and roles are discovered.
+3. The connector's behaviour depends on the AWS Account Federation app's own settings in Okta, not only on connector configuration. `useGroupMapping`, `joinAllRoles` and `identityProviderArn` are read from the application and determine which accounts and roles are discovered. `useGroupMapping` also disables provisioning: grant and revoke requests are rejected, because role access is derived from group names rather than application assignments.
 
 4. Converting a group-based application assignment into a direct one during provisioning is refused unless `--aws-allow-group-to-direct-assignment-conversion-for-provisioning` is set and the application has `joinAllRoles` or SAML role union enabled.
