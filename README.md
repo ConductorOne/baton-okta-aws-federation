@@ -42,8 +42,9 @@ application it is pointed at:
 - **Accounts** — an AWS account reachable through the application. Its entitlements are the
   SAML roles available in that account.
 - **Groups** — Okta groups that carry AWS role access. This connector does not sync groups as
-  first-class resources; the group resource type exists so that group membership can be
-  granted and revoked. See "Group membership and the paired Okta connector" below.
+  first-class resources, and it does not manage Okta group membership; group principals appear
+  only on the grants it emits against an account's role entitlements. See "Group membership and
+  the paired Okta connector" below.
 
 Grants on an account's role entitlements are emitted to two kinds of principal: directly to
 the Okta users assigned to the application, and to the Okta groups assigned to it.
@@ -63,8 +64,10 @@ create them. Two consequences worth knowing before you deploy it:
   reflected — the Okta connector first, because it is the source of the membership, then this
   one, which re-runs the expansion.
 
-Granting or revoking a group's `member` entitlement is dispatched to this connector, which
-calls Okta's group membership API directly.
+This connector does not provision group membership: the `member` entitlement on a group
+resource belongs to the paired Okta connector, and granting or revoking it is dispatched
+there, not here. What this connector provisions is AWS role access — assigning or revoking a
+user's or a group's SAML role on the AWS app.
 
 # Contributing, Support and Issues
 

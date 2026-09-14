@@ -5,11 +5,11 @@ While developing the connector, please fill out this form. This information is n
 1. What resources does the connector sync?
 
     - Accounts — an AWS account reachable through the AWS Account Federation application in Okta. Its entitlements are the SAML roles available in that account.
-    - Groups — Okta groups that carry AWS role access. The group resource type is registered so that group membership can be granted and revoked; this connector does not sync group membership itself.
+    - Groups — Okta groups that carry AWS role access. This connector does not sync groups as first-class resources, and it does not provision group membership. Group principals appear only on the grants it emits against an account's role entitlements.
 
 2. Can the connector provision any resources? If so, which ones?
 
-    Yes. It grants and revokes a user's SAML role on an AWS account, and grants and revokes Okta group membership. It does not create or delete accounts.
+    Yes, but only AWS role access. It grants and revokes a user's or a group's SAML role on the AWS app, which assigns and removes Okta application assignments. It does not create or delete users or groups, it does not provision Okta group membership (the paired Okta connector does that), and it does not create or delete accounts.
 
 ## Connector credentials
 
@@ -29,12 +29,12 @@ While developing the connector, please fill out this form. This information is n
 
    * Does the credential need any specific scopes or permissions? If so, list them here.
 
-     * **API token**: the token inherits the permissions of the admin who created it. Reading requires the ability to read applications, application assignments and groups. Provisioning group membership additionally requires Group Admin.
+     * **API token**: the token inherits the permissions of the admin who created it. Reading requires the ability to read applications, application assignments and groups. Provisioning a group's assignment to the AWS app additionally requires Group Admin.
 
     * If applicable: Is the list of scopes or permissions different to sync (read) versus provision (read-write)? If so, list the difference here.
 
      * **Sync (read-only)**: a custom read-only admin role, or Read Only Administrator, is sufficient.
-     * **Provisioning (read-write)**: Super Administrator, or the combination Read Only + Application Administrator + Group Administrator. Group membership provisioning fails without Group Admin.
+     * **Provisioning (read-write)**: Super Administrator, or the combination Read Only + Application Administrator + Group Administrator. Provisioning a group's assignment to the AWS app fails without Group Admin.
 
      * What level of access or permissions does the user need in order to create the credentials? (For example, must be a super administrator, must have access to the admin console, etc.)
 
@@ -42,7 +42,7 @@ While developing the connector, please fill out this form. This information is n
 
 ## Additional setup notes
 
-1. This connector requires a separate Okta connector for the same Okta organization. Group membership is read from that connector, and the AWS role access a user holds through a group is resolved against it. Without the paired connector, group-based access does not resolve.
+1. This connector requires a separate Okta connector for the same Okta organization. Group membership is read from that connector, and the AWS role access a user holds through a group is resolved against it. Without the paired connector, group-based access does not resolve. Group membership is also provisioned through that connector, not this one.
 
 2. After a group membership changes, both connectors must sync before the change is reflected: the Okta connector first, because it is the source of the membership, then this connector, which re-runs the expansion.
 
