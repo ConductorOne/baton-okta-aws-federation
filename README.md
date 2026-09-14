@@ -36,8 +36,9 @@ baton resources
 
 # Data Model
 
-`baton-okta-aws-federation` syncs two resource types from the AWS Account Federation
-application it is pointed at:
+`baton-okta-aws-federation` syncs one resource type from the AWS Account Federation
+application it is pointed at, and emits grants to the group principals that carry AWS role
+access:
 
 - **Accounts** — an AWS account reachable through the application. Its entitlements are the
   SAML roles available in that account.
