@@ -4,7 +4,7 @@ go 1.27.1
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.7
-	github.com/conductorone/baton-sdk v0.32.1
+	github.com/conductorone/baton-sdk v0.32.2
 	github.com/conductorone/okta-sdk-golang/v5 v5.0.8-conductorone
 	github.com/deckarep/golang-set/v2 v2.9.0
 	github.com/ennyjfrick/ruleguard-logfatal v0.0.2
