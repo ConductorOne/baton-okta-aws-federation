@@ -296,7 +296,7 @@ func (c *Okta) getAWSApplicationConfig(ctx context.Context, ss sessions.SessionS
 
 	app, resp, err := c.clientV5.ApplicationAPI.GetApplication(ctx, c.awsConfig.OktaAppId).Execute()
 	if err != nil {
-		return nil, fmt.Errorf("okta-aws-connector: verify failed to fetch aws app: %w", err)
+		return nil, fmt.Errorf("okta-aws-connector: verify failed to fetch aws app: %w", wrapRateLimitError(resp, err))
 	}
 	awsAppRespCtx, err := responseToContextV5(&pagination.Token{}, resp)
 	if err != nil {
@@ -405,9 +405,9 @@ type AppUserSchema struct {
 }
 
 func getDefaultAppUserSchema(ctx context.Context, client *oktav5.APIClient, appId string) (*oktav5.UserSchema, error) {
-	schema, _, err := client.SchemaAPI.GetApplicationUserSchema(ctx, appId).Execute()
+	schema, resp, err := client.SchemaAPI.GetApplicationUserSchema(ctx, appId).Execute()
 	if err != nil {
-		return nil, fmt.Errorf("okta-aws-connector: error fetching default application schema: %w", err)
+		return nil, fmt.Errorf("okta-aws-connector: error fetching default application schema: %w", wrapRateLimitError(resp, err))
 	}
 
 	return schema, nil
