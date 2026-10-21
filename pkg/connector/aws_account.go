@@ -849,7 +849,7 @@ func (o *accountResourceType) Grant(ctx context.Context, principal *v2.Resource,
 	}
 	awsConfig, err := o.connector.getAWSApplicationConfig(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("error getting aws app settings config")
+		return nil, fmt.Errorf("okta-aws-connector: error getting aws app settings config: %w", err)
 	}
 
 	if awsConfig.UseGroupMapping {
@@ -872,8 +872,8 @@ func (o *accountResourceType) Grant(ctx context.Context, principal *v2.Resource,
 		appUser, response, err := o.connector.clientV5.ApplicationUsersAPI.GetApplicationUser(ctx, appID, userID).
 			Execute()
 		if err != nil {
-			if response == nil {
-				return nil, fmt.Errorf("okta-aws-connector: failed to fetch application user: %w", err)
+			if response == nil || isRateLimited(response) {
+				return nil, fmt.Errorf("okta-aws-connector: failed to fetch application user: %w", wrapRateLimitError(response, err))
 			}
 			defer response.Body.Close()
 			errOkta, err := getErrorV5(response)
@@ -912,7 +912,9 @@ func (o *accountResourceType) Grant(ctx context.Context, principal *v2.Resource,
 			}
 
 			if slices.Contains(samlRoles, newSamlRole) {
-				return annotations.New(&v2.GrantAlreadyExists{}), nil
+				annos := rateLimitAnnotations(response)
+				annos.Append(&v2.GrantAlreadyExists{})
+				return annos, nil
 			}
 
 			if samlRoles == nil {
@@ -922,7 +924,7 @@ func (o *accountResourceType) Grant(ctx context.Context, principal *v2.Resource,
 			samlRoles = append(samlRoles, newSamlRole)
 			appUserProfile["samlRoles"] = samlRoles
 
-			_, _, err = o.connector.clientV5.ApplicationUsersAPI.UpdateApplicationUser(ctx, appID, *appUser.Id).
+			_, updateResp, err := o.connector.clientV5.ApplicationUsersAPI.UpdateApplicationUser(ctx, appID, *appUser.Id).
 				AppUser(oktav5.AppUserUpdateRequest{
 					AppUserProfileRequestPayload: &oktav5.AppUserProfileRequestPayload{
 						Profile: appUserProfile,
@@ -933,17 +935,17 @@ func (o *accountResourceType) Grant(ctx context.Context, principal *v2.Resource,
 				}).
 				Execute()
 			if err != nil {
-				return nil, fmt.Errorf("okta-aws-connector: failed to update application user: %w", err)
+				return nil, fmt.Errorf("okta-aws-connector: failed to update application user: %w", wrapRateLimitError(updateResp, err))
 			}
 
-			return nil, nil
+			return rateLimitAnnotations(updateResp), nil
 		}
 
 		profile := map[string]any{
 			"samlRoles": []string{newSamlRole},
 		}
 
-		_, _, err = o.connector.clientV5.ApplicationUsersAPI.AssignUserToApplication(ctx, appID).
+		_, assignResp, err := o.connector.clientV5.ApplicationUsersAPI.AssignUserToApplication(ctx, appID).
 			AppUser(oktav5.AppUserAssignRequest{
 				Id:      userID,
 				Scope:   oktav5.PtrString(appUserScope),
@@ -951,15 +953,16 @@ func (o *accountResourceType) Grant(ctx context.Context, principal *v2.Resource,
 			}).
 			Execute()
 		if err != nil {
-			return nil, fmt.Errorf("okta-aws-connector: error assigning app to user %w", err)
+			return nil, fmt.Errorf("okta-aws-connector: error assigning app to user %w", wrapRateLimitError(assignResp, err))
 		}
+		return rateLimitAnnotations(assignResp), nil
 	case resourceTypeGroup.Id:
 		groupID := principal.Id.Resource
 		appGroup, response, err := o.connector.clientV5.ApplicationGroupsAPI.GetApplicationGroupAssignment(ctx, appID, groupID).
 			Execute()
 		if err != nil {
-			if response == nil {
-				return nil, fmt.Errorf("okta-aws-connector: failed to fetch application group assignment: %w", err)
+			if response == nil || isRateLimited(response) {
+				return nil, fmt.Errorf("okta-aws-connector: failed to fetch application group assignment: %w", wrapRateLimitError(response, err))
 			}
 			defer response.Body.Close()
 			errOkta, err := getErrorV5(response)
@@ -982,25 +985,23 @@ func (o *accountResourceType) Grant(ctx context.Context, principal *v2.Resource,
 
 		// AssignGroupToApplication() does not allow atomic setting of the new saml role,
 		// so this just does the basic assignment.
-		_, _, err = o.connector.clientV5.ApplicationGroupsAPI.AssignGroupToApplication(ctx, appID, groupID).
+		_, assignResp, err := o.connector.clientV5.ApplicationGroupsAPI.AssignGroupToApplication(ctx, appID, groupID).
 			Execute()
 		if err != nil {
-			return nil, fmt.Errorf("okta-aws-connector: error creating application group assignment %w", err)
+			return nil, fmt.Errorf("okta-aws-connector: error creating application group assignment %w", wrapRateLimitError(assignResp, err))
 		}
 
 		// Now, we need to repeat the call from above to get any existing saml roles set via the assignment.
-		appGroup, _, err = o.connector.clientV5.ApplicationGroupsAPI.GetApplicationGroupAssignment(ctx, appID, groupID).
+		appGroup, getResp, err := o.connector.clientV5.ApplicationGroupsAPI.GetApplicationGroupAssignment(ctx, appID, groupID).
 			Execute()
 		if err != nil {
-			return nil, fmt.Errorf("okta-aws-connector: error getting application group assignment after assignment: %w", err)
+			return nil, fmt.Errorf("okta-aws-connector: error getting application group assignment after assignment: %w", wrapRateLimitError(getResp, err))
 		}
 
 		return addSamlRoleToAppGroup(ctx, o.connector.clientV5, appID, groupID, newSamlRole, appGroup)
 	default:
 		return nil, fmt.Errorf("okta-aws-connector: invalid grant resource type: %s", principal.Id.ResourceType)
 	}
-
-	return nil, nil
 }
 
 func (o *accountResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error) {
@@ -1009,7 +1010,7 @@ func (o *accountResourceType) Revoke(ctx context.Context, grant *v2.Grant) (anno
 	}
 	awsConfig, err := o.connector.getAWSApplicationConfig(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("okta-aws-connector: error getting aws app settings config")
+		return nil, fmt.Errorf("okta-aws-connector: error getting aws app settings config: %w", err)
 	}
 
 	if awsConfig.UseGroupMapping {
@@ -1032,8 +1033,8 @@ func (o *accountResourceType) Revoke(ctx context.Context, grant *v2.Grant) (anno
 		appUser, response, err := o.connector.clientV5.ApplicationUsersAPI.GetApplicationUser(ctx, appID, userID).
 			Execute()
 		if err != nil {
-			if response == nil {
-				return nil, fmt.Errorf("okta-aws-connector: failed to fetch application user: %w", err)
+			if response == nil || isRateLimited(response) {
+				return nil, fmt.Errorf("okta-aws-connector: failed to fetch application user: %w", wrapRateLimitError(response, err))
 			}
 			defer response.Body.Close()
 			errOkta, err := getErrorV5(response)
@@ -1070,7 +1071,9 @@ func (o *accountResourceType) Revoke(ctx context.Context, grant *v2.Grant) (anno
 			return nil, fmt.Errorf("okta-aws-connector: failed to get saml roles for user '%v': %w", appUser.Id, err)
 		}
 		if !slices.Contains(samlRoles, samlRoleToRemove) {
-			return annotations.New(&v2.GrantAlreadyRevoked{}), nil
+			annos := rateLimitAnnotations(response)
+			annos.Append(&v2.GrantAlreadyRevoked{})
+			return annos, nil
 		}
 
 		appUserProfile := appUser.Profile
@@ -1082,7 +1085,7 @@ func (o *accountResourceType) Revoke(ctx context.Context, grant *v2.Grant) (anno
 
 		appUserProfile["samlRoles"] = newSamlRoles
 
-		_, _, err = o.connector.clientV5.ApplicationUsersAPI.UpdateApplicationUser(ctx, appID, *appUser.Id).
+		_, updateResp, err := o.connector.clientV5.ApplicationUsersAPI.UpdateApplicationUser(ctx, appID, *appUser.Id).
 			AppUser(oktav5.AppUserUpdateRequest{
 				AppUserProfileRequestPayload: &oktav5.AppUserProfileRequestPayload{
 					Profile: appUserProfile,
@@ -1093,15 +1096,16 @@ func (o *accountResourceType) Revoke(ctx context.Context, grant *v2.Grant) (anno
 			}).
 			Execute()
 		if err != nil {
-			return nil, fmt.Errorf("okta-aws-connector: error updating application user: %w", err)
+			return nil, fmt.Errorf("okta-aws-connector: error updating application user: %w", wrapRateLimitError(updateResp, err))
 		}
+		return rateLimitAnnotations(updateResp), nil
 	case resourceTypeGroup.Id:
 		groupID := grant.Principal.Id.Resource
 		appGroup, response, err := o.connector.clientV5.ApplicationGroupsAPI.GetApplicationGroupAssignment(ctx, appID, groupID).
 			Execute()
 		if err != nil {
-			if response == nil {
-				return nil, fmt.Errorf("okta-aws-connector: failed to fetch application group assignment: %w", err)
+			if response == nil || isRateLimited(response) {
+				return nil, fmt.Errorf("okta-aws-connector: failed to fetch application group assignment: %w", wrapRateLimitError(response, err))
 			}
 			defer response.Body.Close()
 			errOkta, err := getErrorV5(response)
@@ -1128,14 +1132,14 @@ func (o *accountResourceType) Revoke(ctx context.Context, grant *v2.Grant) (anno
 			return annotations.New(&v2.GrantAlreadyRevoked{}), nil
 		}
 		newSamlRoles := removeSamlRole(samlRoles, samlRoleToRemove)
-		_, err = updateApplicationGroup(ctx, o.connector.clientV5, appID, groupID, newSamlRoles)
+		_, annos, err := updateApplicationGroup(ctx, o.connector.clientV5, appID, groupID, newSamlRoles)
 		if err != nil {
 			return nil, err
 		}
+		return annos, nil
 	default:
 		return nil, fmt.Errorf("okta-aws-connector: invalid revoke resource type: %s", grant.Principal.Id.ResourceType)
 	}
-	return nil, nil
 }
 
 func addSamlRoleToAppGroup(
@@ -1157,11 +1161,11 @@ func addSamlRoleToAppGroup(
 		samlRoles = make([]string, 0)
 	}
 	samlRoles = append(samlRoles, newSamlRole)
-	_, err = updateApplicationGroup(ctx, clientV5, appID, groupID, samlRoles)
+	_, annos, err := updateApplicationGroup(ctx, clientV5, appID, groupID, samlRoles)
 	if err != nil {
 		return nil, fmt.Errorf("okta-aws-connector: error updating application group '%s': %w", groupID, err)
 	}
-	return nil, nil
+	return annos, nil
 }
 
 // This function *replaces* saml roles on an application group with those provided.
@@ -1171,7 +1175,7 @@ func updateApplicationGroup(
 	appID string,
 	groupID string,
 	samlRoles []string,
-) (*oktav5.ApplicationGroupAssignment, error) {
+) (*oktav5.ApplicationGroupAssignment, annotations.Annotations, error) {
 	apiPath := fmt.Sprintf(apiPathApplicationGroup, appID, groupID)
 
 	payload := []JSONPatchOperation{
@@ -1196,25 +1200,26 @@ func updateApplicationGroup(
 		nil,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	httpResp, err := clientV5.Do(ctx, req)
+	apiResp := &oktav5.APIResponse{Response: httpResp}
 	if err != nil {
-		return nil, fmt.Errorf("okta-aws-connector: error updating application group: %w", err)
+		return nil, nil, fmt.Errorf("okta-aws-connector: error updating application group: %w", wrapRateLimitError(apiResp, err))
 	}
 	defer httpResp.Body.Close()
 
 	if httpResp.StatusCode >= 400 {
-		return nil, fmt.Errorf("okta-aws-connector: failed saml roles replace request, status code %d", httpResp.StatusCode)
+		return nil, nil, fmt.Errorf("okta-aws-connector: failed saml roles replace request, status code %d", httpResp.StatusCode)
 	}
 
 	var appGroup oktav5.ApplicationGroupAssignment
 	if err := json.NewDecoder(httpResp.Body).Decode(&appGroup); err != nil {
-		return nil, fmt.Errorf("okta-aws-connector: failed to decode response: %w", err)
+		return nil, nil, fmt.Errorf("okta-aws-connector: failed to decode response: %w", err)
 	}
 
-	return &appGroup, nil
+	return &appGroup, rateLimitAnnotations(apiResp), nil
 }
 
 func removeSamlRole(samlRoles []string, samlRoleToRemove string) []string {

@@ -34,13 +34,19 @@ func parseRespV5(resp *oktav5.APIResponse) (string, annotations.Annotations, err
 }
 
 func parseGetRespV5(resp *oktav5.APIResponse) (annotations.Annotations, error) {
+	return rateLimitAnnotations(resp), nil
+}
+
+// rateLimitAnnotations reports the rate-limit state Okta returned with resp, so the
+// caller can pace later requests before Okta starts rejecting them.
+func rateLimitAnnotations(resp *oktav5.APIResponse) annotations.Annotations {
 	var annos annotations.Annotations
-	if resp != nil {
+	if resp != nil && resp.Response != nil {
 		if desc, err := ratelimit.ExtractRateLimitData(resp.StatusCode, &resp.Header); err == nil {
 			annos.WithRateLimiting(desc)
 		}
 	}
-	return annos, nil
+	return annos
 }
 
 func parsePageToken(token string, resourceID *v2.ResourceId) (*pagination.Bag, string, error) {
