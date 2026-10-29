@@ -259,6 +259,28 @@ func TestGrantGroupReportsRateLimit(t *testing.T) {
 	requireRateLimitAnnotation(t, annos)
 }
 
+func TestGrantGroupAlreadyExistsReportsRateLimit(t *testing.T) {
+	o := newTestAccountBuilder(t, appRoutes(map[string]fakeRoute{
+		"GET /api/v1/apps/" + testAppID + "/groups/" + testGroupID: ok(`{"id": "` + testGroupID + `", "profile": {"samlRoles": ["admin"]}}`),
+	}))
+
+	annos, err := o.Grant(context.Background(), testPrincipal(resourceTypeGroup.Id, testGroupID), testEntitlement("admin"))
+	require.NoError(t, err)
+	require.True(t, annos.Contains(&v2.GrantAlreadyExists{}))
+	requireRateLimitAnnotation(t, annos)
+}
+
+func TestRevokeGroupAlreadyRevokedReportsRateLimit(t *testing.T) {
+	o := newTestAccountBuilder(t, appRoutes(map[string]fakeRoute{
+		"GET /api/v1/apps/" + testAppID + "/groups/" + testGroupID: ok(`{"id": "` + testGroupID + `", "profile": {"samlRoles": ["existing"]}}`),
+	}))
+
+	annos, err := o.Revoke(context.Background(), testGrant(testPrincipal(resourceTypeGroup.Id, testGroupID), "admin"))
+	require.NoError(t, err)
+	require.True(t, annos.Contains(&v2.GrantAlreadyRevoked{}))
+	requireRateLimitAnnotation(t, annos)
+}
+
 func TestNonRateLimitErrorsUnchanged(t *testing.T) {
 	appUserPath := "/api/v1/apps/" + testAppID + "/users/" + testUserID
 	o := newTestAccountBuilder(t, appRoutes(map[string]fakeRoute{
