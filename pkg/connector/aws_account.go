@@ -980,7 +980,7 @@ func (o *accountResourceType) Grant(ctx context.Context, principal *v2.Resource,
 		}
 
 		if appGroup != nil {
-			return addSamlRoleToAppGroup(ctx, o.connector.clientV5, appID, groupID, newSamlRole, appGroup)
+			return addSamlRoleToAppGroup(ctx, o.connector.clientV5, appID, groupID, newSamlRole, appGroup, response)
 		}
 
 		// AssignGroupToApplication() does not allow atomic setting of the new saml role,
@@ -998,7 +998,7 @@ func (o *accountResourceType) Grant(ctx context.Context, principal *v2.Resource,
 			return nil, fmt.Errorf("okta-aws-connector: error getting application group assignment after assignment: %w", wrapRateLimitError(getResp, err))
 		}
 
-		return addSamlRoleToAppGroup(ctx, o.connector.clientV5, appID, groupID, newSamlRole, appGroup)
+		return addSamlRoleToAppGroup(ctx, o.connector.clientV5, appID, groupID, newSamlRole, appGroup, getResp)
 	default:
 		return nil, fmt.Errorf("okta-aws-connector: invalid grant resource type: %s", principal.Id.ResourceType)
 	}
@@ -1129,7 +1129,9 @@ func (o *accountResourceType) Revoke(ctx context.Context, grant *v2.Grant) (anno
 			return nil, fmt.Errorf("okta-aws-connector: failed to get saml roles for app group '%s': %w", groupID, err)
 		}
 		if !slices.Contains(samlRoles, samlRoleToRemove) {
-			return annotations.New(&v2.GrantAlreadyRevoked{}), nil
+			annos := rateLimitAnnotations(response)
+			annos.Append(&v2.GrantAlreadyRevoked{})
+			return annos, nil
 		}
 		newSamlRoles := removeSamlRole(samlRoles, samlRoleToRemove)
 		_, annos, err := updateApplicationGroup(ctx, o.connector.clientV5, appID, groupID, newSamlRoles)
@@ -1149,13 +1151,16 @@ func addSamlRoleToAppGroup(
 	groupID string,
 	newSamlRole string,
 	appGroup *oktav5.ApplicationGroupAssignment,
+	appGroupResp *oktav5.APIResponse,
 ) (annotations.Annotations, error) {
 	samlRoles, err := getSAMLRolesFromAppGroupProfileV5(ctx, *appGroup)
 	if err != nil {
 		return nil, fmt.Errorf("okta-aws-connector: failed to get saml roles for app group profile '%s': %w", groupID, err)
 	}
 	if slices.Contains(samlRoles, newSamlRole) {
-		return annotations.New(&v2.GrantAlreadyExists{}), nil
+		annos := rateLimitAnnotations(appGroupResp)
+		annos.Append(&v2.GrantAlreadyExists{})
+		return annos, nil
 	}
 	if samlRoles == nil {
 		samlRoles = make([]string, 0)
