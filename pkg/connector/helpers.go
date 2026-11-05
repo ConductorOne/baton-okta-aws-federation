@@ -51,6 +51,22 @@ func getErrorV5(response *oktav5.APIResponse) (oktav5.Error, error) {
 	return errOkta, nil
 }
 
+func isRateLimited(resp *oktav5.APIResponse) bool {
+	return resp != nil && resp.Response != nil && resp.StatusCode == http.StatusTooManyRequests
+}
+
+// wrapRateLimitError types an Okta 429 as codes.Unavailable carrying the response's
+// rate-limit details: baton-sdk only retries Unavailable, and waits for the reset time it
+// finds in those details. When the SDK exhausts its own 429 retries it still returns the
+// last response with its headers, so the reset time is available here. Any other error is
+// returned unchanged.
+func wrapRateLimitError(resp *oktav5.APIResponse, err error) error {
+	if err == nil || !isRateLimited(resp) {
+		return err
+	}
+	return uhttp.WrapErrorsWithRateLimitInfo(codes.Unavailable, resp.Response, err)
+}
+
 func handleOktaResponseErrorV5(ctx context.Context, resp *oktav5.APIResponse, err error) error {
 	var urlErr *url.Error
 	if errors.As(err, &urlErr) {
