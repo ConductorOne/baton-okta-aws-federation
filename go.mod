@@ -4,7 +4,7 @@ go 1.27.4
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.48.0
-	github.com/conductorone/baton-sdk v0.46.0
+	github.com/conductorone/baton-sdk v0.46.1
 	github.com/conductorone/okta-sdk-golang/v5 v5.0.8-conductorone
 	github.com/deckarep/golang-set/v2 v2.9.0
 	github.com/ennyjfrick/ruleguard-logfatal v0.0.2
@@ -51,9 +51,9 @@ require (
 	github.com/cockroachdb/redact v1.1.8 // indirect
 	github.com/cockroachdb/swiss v0.0.0-20260820225851-333444432258 // indirect
 	github.com/cockroachdb/tokenbucket v0.0.0-20250429170803-42689b6311bb // indirect
-	github.com/conductorone/dpop v0.4.0 // indirect
-	github.com/conductorone/dpop/integrations/dpop_grpc v0.4.0 // indirect
-	github.com/conductorone/dpop/integrations/dpop_oauth2 v0.4.0 // indirect
+	github.com/conductorone/dpop v0.4.1 // indirect
+	github.com/conductorone/dpop/integrations/dpop_grpc v0.4.1 // indirect
+	github.com/conductorone/dpop/integrations/dpop_oauth2 v0.4.1 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 // indirect
 	github.com/ebitengine/purego v0.11.3 // indirect
 	github.com/envoyproxy/protoc-gen-validate v1.3.3 // indirect
